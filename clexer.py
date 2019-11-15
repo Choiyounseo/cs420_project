@@ -42,7 +42,7 @@ class CLexer:
   t_MINUS = r'\-'
   t_STAR = r'\*'
   t_DIVIDE = r'/'
-  t_ICREMENT = r'\+\+'
+  t_INCREMENT = r'\+\+'
   t_GT = r'>'
   t_GTE = r'>='
   t_LT = r'<'
@@ -64,7 +64,7 @@ class CLexer:
   t_INT = r'int'
   t_FLOAT = r'float'
   
-  def t_NUMBER(t):
+  def t_NUMBER(self, t):
     r'\d+'
     try:
         t.value = int(t.value)
@@ -80,8 +80,7 @@ class CLexer:
   def t_error(self, t):
     prinnt("Illigal character '%s'" % t.value[0])
     t.lexer.skip(1)
-  
-  
+
   def build(self, **kwargs):
     self.lexer = lex.lex(object=self, **kwargs)
     return self.lexer

@@ -1,4 +1,5 @@
 import ply.yacc as yacc
+from clexer import CLexer
 
 def p_code(p):
     'code : funclist'
@@ -77,10 +78,11 @@ def p_functcall(p):
 def p_arglist(p):
     '''arglist : arg COMMA arglist
                | arg'''
-        pass
+    pass
 
 def p_arg(p):
-    'arg : ID | empty'
+    '''arg : ID
+           | empty'''
     pass
 
 def p_return(p):
@@ -92,7 +94,8 @@ def p_expression(p):
     '''expression : term PLUS expression
                   | term MINUS expression
                   | term
-                  | LPAREN expression RPAREN'''
+                  | LPAREN expression RPAREN
+                  | casting'''
     pass
 
 def p_term(p):
@@ -102,7 +105,9 @@ def p_term(p):
     pass
 
 def p_factor(p):
-    'factor : NUMBER | ID'
+    '''factor : NUMBER
+              | ID
+              | ID LBRACKET expression RBRACKET'''
     pass
 
 def p_casting(p):
@@ -123,5 +128,20 @@ def p_condition(p):
     pass
 
 def p_cmp(p):
-    'cmp : GT | GTE | LT | LTE | EQ | NEQ'
+    '''cmp : GT
+           | GTE
+           | LT
+           | LTE
+           | EQ
+           | NEQ'''
     pass
+
+def p_error(p):
+    print(p)
+    print("Error")
+    exit()
+
+clexer = CLexer()
+lexer = clexer.build()
+tokens = clexer.tokens
+parser = yacc.yacc()
