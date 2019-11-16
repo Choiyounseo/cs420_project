@@ -5,4 +5,4 @@ code = "".join(f.readlines())
 f.close()
 
 tree = parser.parse(code, lexer=lexer)
-print(result)
+print(tree)

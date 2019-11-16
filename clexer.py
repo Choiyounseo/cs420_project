@@ -1,13 +1,16 @@
 import ply.lex as lex
 
+reserved = {
+    'void' : 'VOID',
+    'return': 'RETURN',
+    'for': 'FOR',
+    'if': 'IF',
+    'int': 'INT',
+    'float': 'FLOAT',
+}
+
 tokens = [
-  "VOID",
-  "RETURN",
-  "FOR",
-  "IF",
   "ID",
-  "INT",
-  "FLOAT",
   "NUMBER",
   "ASSIGN",
   "PLUS",
@@ -29,14 +32,19 @@ tokens = [
   "RBRACE",
   "LBRACKET",
   "RBRACKET"
-]
+] + list(reserved.values())
 
 class CLexer:
   def __init__(self):
     self.tokens = tokens
+    self.reserved = reserved
     self.lexer = None
 
-  t_ID = r'([a-zA-Z_][0-9a-zA-Z_]*)'
+  def t_ID(self, t):
+    r'([a-zA-Z_][0-9a-zA-Z_]*)'
+    t.type = self.reserved.get(t.value, 'ID')
+    return t
+  
   t_ASSIGN = r'='
   t_PLUS = r'\+'
   t_MINUS = r'\-'
