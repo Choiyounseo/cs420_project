@@ -1,19 +1,24 @@
 import ply.yacc as yacc
 from clexer import CLexer
 
+DEBUG = True
+
+def print_log(name, p):
+    if DEBUG:
+        print(name, p)
+
 def p_code(p):
     'code : funclist'
     p[0] = p[1]
-    print("p_code: ", p[0])
 
 def p_funclist(p):
     '''funclist : funclist func
                 | func'''
     if len(p) == 3:
-        p[0] = [p[1]] + p[2]
+        p[0] = p[1] + [p[2]]
     else:
         p[0] = [p[1]]
-    print("p_funclist: ", p)
+    print_log("p_funclist: ", p[0])
 
 def p_func(p):
     '''func : INT ID LPAREN paramlist RPAREN LBRACE stmtlist RBRACE
@@ -21,16 +26,16 @@ def p_func(p):
             | VOID ID LPAREN paramlist RPAREN LBRACE stmtlist RBRACE
     '''
     p[0] = ["function", p[1], p[2], ["parameter", p[4]], p[7], [p.lineno(1), p.lineno(8)]]
-    print("p_func: ", p)
+    print_log("p_func: ", p[0])
 
 def p_paramlist(p):
-    '''paramlist : param COMMA paramlist
+    '''paramlist : paramlist COMMA param
                  | param'''
-    if len(p) == 3:
-        p[0] = [p[1]] + p[2]
+    if len(p) == 4:
+        p[0] = p[1] + [p[3]]
     else:
         p[0] = [p[1]]
-    print("p_paramlist: ", p)
+    print_log("p_paramlist: ", p[0])
 
 def p_param(p):
     '''param : VOID
@@ -40,28 +45,27 @@ def p_param(p):
         	 | INT STAR ID
         	 | FLOAT STAR ID'''
     if len(p) == 4:
-        p[0] = ["id", p[1]+p[2], p[3]]
+        p[0] = ["id", p[1] + p[2], p[3]]
     elif len(p) == 3:
         p[0] = ["id", p[1], p[2]]
     elif len(p) == 2:
         p[0] = p[1]
     else:
         p_error(p)
-    print("p_param: ", p)
+    print_log("p_param: ", p[0])
 
 def p_empty(p):
     'empty :'
     p[0] = None
-    print("p_empty: ", p[0])
 
 def p_stmtlist(p):
-    '''stmtlist : stmt stmtlist
+    '''stmtlist : stmtlist stmt
                 | stmt'''
     if len(p) == 3:
-        p[0] = [p[1]] + p[2]
+        p[0] = p[1] + [p[2]]
     else:
         p[0] = [p[1]]
-    print("p_stmtlist: ", p)
+    print_log("p_stmtlist: ", p[0])
 
 def p_stmt(p):
     '''stmt : declare semicolonlist
@@ -71,56 +75,86 @@ def p_stmt(p):
             | return semicolonlist
             | forloop
             | if'''
-    if len(p) == 3:
-        p[0] = [p[1]] + p[2]
-    else:
-        p[0] = [p[1]]
-    print("p_stmt: ", p)
+    p[0] = p[1]
+    print_log("p_stmt: ", p[0])
 
 def p_semicolonlist(p):
     '''semicolonlist : SEMICOLON semicolonlist
                      | SEMICOLON'''
-    if len(p) == 3:
-        p[0] = [p[1]] + p[2]
-    else:
-        p[0] = [p[1]]
-    print("p_semicolonlist: ", p[0])
+    pass
 
 def p_declare(p):
-    '''declare : INT ID
-               | INT STAR ID
-               | FLOAT ID
-               | FLOAT STAR ID'''
-    print("p_declare: ", p)
-    pass
+    '''declare : INT declarelist
+               | FLOAT declarelist
+               | INT STAR declarelist
+               | FLOAT STAR declarelist'''
+    if len(p) == 4:
+        p[0] = ["declare", p[1] + p[2], p[3], p.lineno(1)]
+    elif len(p) == 3:
+        p[0] = ["declare", p[1], p[2], p.lineno(1)]
+    print_log("p_declare: ", p[0])
+
+def p_declarelist(p):
+    '''declarelist : declarelist COMMA id
+                   | id'''
+    if len(p) == 4:
+        p[0] = p[1] + [p[3]]
+    else:
+        p[0] = [p[1]]
 
 def p_assign(p):
-    'assign : ID ASSIGN expression'
-    print("p_assign: ", p)
-    pass
+    'assign : id ASSIGN expression'
+    p[0] = ["assign", p[1], p[3], p.lineno(1)]
+    print_log("p_assign: ", p[0])
 
-def p_increment(p):
-    '''increment : ID INCREMENT
-                 | INCREMENT ID'''
-    print("p_increment: ", p)
-    pass
+def p_increment_id_inc(p):
+    '''increment : id INCREMENT'''
+    p[0] = ["increment", p[1], p.lineno(1)]
+    print_log("p_increment: ", p[0])
+
+def p_increment_inc_id(p):
+    '''increment : INCREMENT id'''
+    p[0] = ["increment", p[2], p.lineno(1)]
+    print_log("p_increment: ", p[0])
 
 def p_functcall(p):
     'functcall : ID LPAREN arglist RPAREN'
-    print("p_functcall: ", p)
-    pass
+    p[0] = ["functcall", p[1], ["args", p[3]], p.lineno(1)]
+    print_log("p_functcall: ", p[0])
 
 def p_arglist(p):
-    '''arglist : arg COMMA arglist
+    '''arglist : arglist COMMA arg
                | arg'''
-    print("p_arglist: ", p)
-    pass
+    arg = None
+    if len(p) == 4:
+        p[0] = p[1]
+        arg = p[3]
+    else:
+        p[0] = []
+        arg = p[1]
+
+    if arg is not None:
+        p[0].append(arg)
+    print_log("p_arglist: ", p[0])
 
 def p_arg(p):
-    '''arg : ID
-           | empty'''
-    print("p_arg: ", p)
-    pass
+    '''arg : expression'''
+    p[0] = p[1]
+    print_log("p_arg: ", p[0])
+
+def p_arg_string(p):
+    '''arg : string'''
+    p[0] = p[1]
+    print_log("p_arg: ", p[0])
+
+def p_string(p):
+    '''string : STRING'''
+    p[0] = ["string", p[1]]
+
+def p_arg_empty(p):
+    '''arg : empty'''
+    p[0] = None
+    print_log("p_arg: ", p[0])
 
 def p_return(p):
     '''return : RETURN expression
@@ -129,51 +163,74 @@ def p_return(p):
         p[0] = ["return", None, p.lineno(1)]
     else:
         p[0] = ["return", p[2], p.lineno(1)]
-    print("p_return: ", p)
+    print_log("p_return: ", p[0])
 
 def p_expression(p):
     '''expression : term PLUS expression
                   | term MINUS expression
+                  | functcall
                   | term
-                  | LPAREN expression RPAREN
                   | casting'''
-    print("p_expression: ", p)
-    pass
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = [p[2], p[1], p[3]]
+    print_log("p_expression: ", p[0])
+
+def p_expression_paren(p):
+    '''expression : LPAREN expression RPAREN'''
+    p[0] = p[2]
+    print_log("p_expression: ", p[0])
 
 def p_term(p):
     '''term : factor STAR term
             | factor DIVIDE term
             | factor'''
-    print("p_term: ", p)
-    pass
+    if len(p) == 4:
+        p[0] = [p[2], p[1], p[3]]
+    else:
+        p[0] = p[1]
+    print_log("p_term: ", p[0])
 
-def p_factor(p):
-    '''factor : NUMBER
-              | ID
+def p_factor_num(p):
+    '''factor : NUMBER'''
+    p[0] = ["number", p[1]]
+    print_log("p_factor: ", p[0])
+
+def p_factor_id(p):
+    '''factor : id'''
+    p[0] = p[1]
+    print_log("p_factor: ", p[0])
+
+def p_id(p):
+    '''id : ID
               | ID LBRACKET expression RBRACKET'''
-    print("p_factor: ", p) 
-    pass
+    if len(p) == 2:
+        p[0] = ["id", p[1]]
+    else:
+        p[0] = ["array", p[1], p[3]]
+    print_log("p_factor: ", p[0])
 
 def p_casting(p):
     '''casting : LPAREN INT RPAREN expression
                | LPAREN FLOAT RPAREN expression'''
-    print("p_casting: ", p)
-    pass
+    p[0] = ["casting", p[2], p[4]]
+    print_log("p_casting: ", p[0])
 
 def p_forloop(p):
     'forloop : FOR LPAREN assign SEMICOLON condition SEMICOLON increment RPAREN LBRACE stmtlist RBRACE'
-    print("p_forloop: ", p)
-    pass
+    p[0] = ["for", p[3], p[5], p[7], p[10]]
+    print_log("p_forloop: ", p[0])
 
 def p_if(p):
-    'if : IF LPAREN RPAREN LBRACE stmtlist RBRACE'
-    print("p_if: ", p)
-    pass
+    'if : IF LPAREN condition RPAREN LBRACE stmtlist RBRACE'
+    p[0] = ["if", p[3], p[6]]
+    print_log("p_if: ", p[0])
 
 def p_condition(p):
     'condition : ID cmp expression'
-    print("p_condition: ", p)
-    pass
+    p[0] = [p[1], p[2], p[3]]
+    print_log("p_condition: ", p[0])
 
 def p_cmp(p):
     '''cmp : GT
@@ -182,11 +239,10 @@ def p_cmp(p):
            | LTE
            | EQ
            | NEQ'''
-    print("p_cmp: ", p)
-    pass
+    p[0] = p[1]
+    print_log("p_cmp: ", p[0])
 
 def p_error(p):
-    print(p)
     print("Syntax error : line", p.lineno)
     exit()
 
