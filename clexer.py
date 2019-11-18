@@ -70,7 +70,8 @@ class CLexer:
   t_ignore = ' \t'
 
   def t_NUMBER(self, t):
-    r'[+-]?([0-9]*[.])?[0-9]+'
+    # r'[+-]?([0-9]*[.])?[0-9]+'
+    r'((0|[1-9][0-9]*)(\.[0-9]+)?)'
     try:
         t.value = float(t.value)
     except ValueError:

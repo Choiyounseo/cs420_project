@@ -123,7 +123,7 @@ def p_functcall(p):
     print_log("p_functcall: ", p[0])
 
 def p_arglist(p):
-    '''arglist : arglist COMMA arg
+    '''arglist : arg COMMA arglist
                | arg'''
     arg = None
     if len(p) == 4:
@@ -193,8 +193,21 @@ def p_term(p):
     print_log("p_term: ", p[0])
 
 def p_factor_num(p):
-    '''factor : NUMBER'''
-    p[0] = ["number", p[1]]
+    '''factor : NUMBER
+              | LPAREN NUMBER RPAREN
+              | LPAREN PLUS NUMBER RPAREN
+              | LPAREN MINUS NUMBER RPAREN'''
+    if len(p) == 2:
+      p[0] = ["number", p[1]]
+    elif len(p) == 4:
+      p[0] = ["number", p[2]]
+    else:
+      if (p[2] == '+'):
+        num = p[3]
+      elif (p[2] == '-'):
+        num = -p[3]
+      p[0] = ["number", num]
+
     print_log("p_factor: ", p[0])
 
 def p_factor_id(p):
@@ -243,8 +256,15 @@ def p_cmp(p):
     print_log("p_cmp: ", p[0])
 
 def p_error(p):
+    while True:
+      tok = parser.token() # get the next token
+      print("token type: ", tok.type)
+      if not tok or tok.type == 'SEMICOLON': break
+    
+    parser.errok()
     print("Syntax error : line", p.lineno)
-    exit()
+    return tok
+    # exit()
 
 clexer = CLexer()
 lexer = clexer.build()
