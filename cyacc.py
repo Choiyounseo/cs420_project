@@ -20,6 +20,7 @@ def p_funclist(p):
         p[0] = [p[1]]
     print_log("p_funclist: ", p[0])
 
+# ignore function inside function ..
 def p_func(p):
     '''func : INT ID LPAREN paramlist RPAREN LBRACE stmtlist RBRACE
             | FLOAT ID LPAREN paramlist RPAREN LBRACE stmtlist RBRACE
@@ -123,7 +124,7 @@ def p_functcall(p):
     print_log("p_functcall: ", p[0])
 
 def p_arglist(p):
-    '''arglist : arg COMMA arglist
+    '''arglist : arglist COMMA arg
                | arg'''
     arg = None
     if len(p) == 4:
@@ -177,11 +178,6 @@ def p_expression(p):
         p[0] = [p[2], p[1], p[3]]
     print_log("p_expression: ", p[0])
 
-def p_expression_paren(p):
-    '''expression : LPAREN expression RPAREN'''
-    p[0] = p[2]
-    print_log("p_expression: ", p[0])
-
 def p_term(p):
     '''term : factor STAR term
             | factor DIVIDE term
@@ -210,6 +206,11 @@ def p_factor_num(p):
 
     print_log("p_factor: ", p[0])
 
+def p_factor_paren(p):
+    '''factor : LPAREN expression RPAREN'''
+    p[0] = p[2]
+    print_log("parentheses_factor: ", p[0])
+
 def p_factor_id(p):
     '''factor : id'''
     p[0] = p[1]
@@ -217,7 +218,7 @@ def p_factor_id(p):
 
 def p_id(p):
     '''id : ID
-              | ID LBRACKET expression RBRACKET'''
+          | ID LBRACKET expression RBRACKET'''
     if len(p) == 2:
         p[0] = ["id", p[1]]
     else:
