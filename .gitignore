@@ -1,3 +1,7 @@
 # Default ignored files
 *.xml
 *.iml
+
+# pycharm for mac
+.idea
+__pycache__
