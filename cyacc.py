@@ -233,17 +233,17 @@ def p_casting(p):
 
 def p_forloop(p):
     'forloop : FOR LPAREN assign SEMICOLON condition SEMICOLON increment RPAREN LBRACE stmtlist RBRACE'
-    p[0] = ["for", p[3], p[5], p[7], p[10]]
+    p[0] = ["for", p[3], p[5], p[7], p[10], [p.lineno(1), p.lineno(11)]]
     print_log("p_forloop: ", p[0])
 
 def p_if(p):
     'if : IF LPAREN condition RPAREN LBRACE stmtlist RBRACE'
-    p[0] = ["if", p[3], p[6]]
+    p[0] = ["if", p[3], p[6], [p.lineno(1), p.lineno(7)]]
     print_log("p_if: ", p[0])
 
 def p_condition(p):
     'condition : ID cmp expression'
-    p[0] = [p[1], p[2], p[3]]
+    p[0] = [p[1], p[2], p[3], p.lineno(1)]
     print_log("p_condition: ", p[0])
 
 def p_cmp(p):
