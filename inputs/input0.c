@@ -1,9 +1,10 @@
-void func(int* a, int b) {
-    return;
-}
 int main(void) {
-    printf("%d", 1 + 3 * 4);
-    printf("%d", 1 +(-3) * 4);
     int a;
-    a = (1) - (+5) -4*(-3)/2;
+    a = 2;
+    printf("%d\n", a);
+    a = a + 5 * 2;
+    printf("%d\n", a);
+    float b;
+    b = a / 5;
+    printf("%f\n", b);
 }

@@ -1,7 +1,7 @@
 import ply.yacc as yacc
 from clexer import CLexer
 
-DEBUG = True
+DEBUG = False
 
 def print_log(name, p):
     if DEBUG:
@@ -105,7 +105,7 @@ def p_declarelist(p):
 
 def p_assign(p):
     'assign : id ASSIGN expression'
-    p[0] = ["assign", p[1], p[3], p.lineno(1)]
+    p[0] = ["assign", p[1], p[3], p.lineno(2)]
     print_log("p_assign: ", p[0])
 
 def p_increment_id_inc(p):
