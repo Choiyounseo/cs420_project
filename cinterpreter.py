@@ -68,6 +68,53 @@ class Scope:
         self.declared_vars = []
         self.dest = None # Where the return value had to be located
 
+    def is_done(self):
+        return self.idx == len(self.stmts)
+
+class ForScope(Scope):
+    def __init__(self, stmts, line_no):
+        # create for-condition stmt
+        new_stmt = copy.deepcopy(stmts)
+        new_stmt[1].insert(0, 'for-condition')
+
+        # set valid line number in increment
+        new_stmt[2][-1] = new_stmt[0][-1]
+
+        # break down single-for-loop-stmts into multiple-stmts
+        sub_stmts = copy.deepcopy(new_stmt[-1])
+        new_stmt.pop()
+        new_stmt += sub_stmts
+
+        super(ForScope, self).__init__(new_stmt, ScopeType.FOR)
+        self.line_no = copy.deepcopy(line_no)
+        self.is_condition_true = True
+        self.next_idx = 0
+
+    def update_idx(self):
+        self.idx = self.next_idx
+
+    def update_next_idx(self):
+        if self.idx == 0:
+            # 0 : ['assign', ['id', 'i'],['number', 0.0], 3]
+            self.next_idx = 1
+        elif self.idx == 1:
+            # 1 : ['for-condition', 'i', '<', ['id', 'count'], 3]
+            self.next_idx = 3
+        elif self.idx == 2:
+            # 2 : ['increment', ['id', 'i'], 3]
+            self.next_idx = 1
+        else:
+            # 3 ~ : stmts in for loop
+            self.next_idx = self.idx + 1
+            if self.next_idx >= len(self.stmts):
+                self.next_idx = 2
+
+    def set_done(self):
+        self.is_condition_true = False
+
+    def is_done(self):
+        return not self.is_condition_true
+
 class Function:
     def __init__(self):
         self.vars = {}
@@ -177,6 +224,9 @@ def next_stmt():
     stmt = scope.stmts[scope.idx]
 #    print(stmt)
 
+    if isinstance(scope, ForScope):
+        scope.update_next_idx()
+
     behavior = stmt[0]
     if behavior == "declare":
         '''
@@ -222,13 +272,14 @@ def next_stmt():
 
     elif behavior == "for":
         '''
-        ['for', ['assign', ['id', 'i'],['number', 0.0], 0],
-                ['i', '<', ['id', 'count'], 17],
-                ['increment', ['id', 'i'], 0],
+        ['for', ['assign', ['id', 'i'],['number', 0.0], 3],
+                ['i', '<', ['id', 'count'], 3],
+                ['increment', ['id', 'i'], 3],
                 stmts,
-                [21, 23]]
+                [3, 5]]
         '''
-        pass
+        func.stack.push(ForScope(stmt[1:-1], stmt[-1]))
+        next_stmt()
     elif behavior == "if":
         '''
         ['if', ['average', '>', ['number', 40.0], 21],
@@ -265,6 +316,33 @@ def next_stmt():
         ['return', ['/', ['id', 'total'], ['id', 'count']], 6]
         '''
         pass
+    elif behavior == "for-condition":
+        '''
+        ['for-condition', 'i', '<', ['id', 'count'], 3]
+        '''
+        success, right_value = next_expr(func, stmt[3])
+        if success == False:
+            # TODO : need to test case that includes functcall in right expression
+            pass
+
+        left_value, condition = func.get_var(stmt[1]).value, stmt[2]
+        if condition == '>':
+            if left_value > right_value:
+                # do nothing
+                pass
+            else:
+                scope.set_done()
+        elif condition == '<':
+            if left_value < right_value:
+                # do nothing
+                pass
+            else:
+                scope.set_done()
+        else:
+            raise PException(f"For condition({condition}) is invalid", stmt[4])
+
+    if isinstance(scope, ForScope):
+        scope.update_idx()
 
     while not MAIN_STACK.isEmpty():
         func = MAIN_STACK.top()
@@ -273,8 +351,16 @@ def next_stmt():
             continue
 
         scope = func.stack.top()
-        if scope.idx == len(scope.stmts):
+        if scope.is_done():
             func.stack.pop()
+            next_scope = func.stack.top()
+            # if current scope is done, next scope must increase statement index
+            if next_scope is not None:
+                if isinstance(next_scope, ForScope):
+                    # do nothing
+                    pass
+                else:
+                    next_scope.idx += 1
             continue
         break
 
