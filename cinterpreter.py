@@ -71,78 +71,58 @@ class Scope:
     def is_done(self):
         return self.idx == len(self.stmts)
 
-class IfScope(Scope):
-    def __init__(self, stmts, line_no):
-        # create for-condition stmt
+class SubScope(Scope):
+    def __init__(self, stmts, line_no, scope_type):
+        # create condition stmt
         new_stmt = copy.deepcopy(stmts)
-        new_stmt[0].insert(0, 'if-condition')
+        if scope_type is ScopeType.IF:
+            new_stmt[0].insert(0, 'if-condition')
+        elif scope_type is ScopeType.FOR:
+            new_stmt[1].insert(0, 'for-condition')
+
+            # set valid line number in increment
+            new_stmt[2][-1] = new_stmt[0][-1]
 
         # break down single-for-loop-stmts into multiple-stmts
         sub_stmts = copy.deepcopy(new_stmt[-1])
         new_stmt.pop()
         new_stmt += sub_stmts
 
-        super(IfScope, self).__init__(new_stmt, ScopeType.IF)
+        super(SubScope, self).__init__(new_stmt, scope_type)
         self.line_no = copy.deepcopy(line_no)
         self.is_condition_true = True
         self.next_idx = 0
+        self.type = scope_type
 
     def update_idx(self):
         self.idx = self.next_idx
 
     def update_next_idx(self):
-        if self.idx == 0:
-            # 0 : ['if-condition', 'a', '3', ['number', 1.0], 3]
-            self.next_idx = 1
-        else:
-            # 1 ~ : stmts in if scope
-            self.next_idx = self.idx + 1
-            if self.next_idx >= len(self.stmts):
-                self.set_done()
+        if self.type is ScopeType.IF:
+            if self.idx == 0:
+                # 0 : ['if-condition', 'a', '3', ['number', 1.0], 3]
+                self.next_idx = 1
+            else:
+                # 1 ~ : stmts in if scope
+                self.next_idx = self.idx + 1
+                if self.next_idx >= len(self.stmts):
+                    self.set_done()
 
-    def set_done(self):
-        self.is_condition_true = False
-
-    def is_done(self):
-        return not self.is_condition_true
-
-class ForScope(Scope):
-    def __init__(self, stmts, line_no):
-        # create for-condition stmt
-        new_stmt = copy.deepcopy(stmts)
-        new_stmt[1].insert(0, 'for-condition')
-
-        # set valid line number in increment
-        new_stmt[2][-1] = new_stmt[0][-1]
-
-        # break down single-for-loop-stmts into multiple-stmts
-        sub_stmts = copy.deepcopy(new_stmt[-1])
-        new_stmt.pop()
-        new_stmt += sub_stmts
-
-        super(ForScope, self).__init__(new_stmt, ScopeType.FOR)
-        self.line_no = copy.deepcopy(line_no)
-        self.is_condition_true = True
-        self.next_idx = 0
-
-    def update_idx(self):
-        self.idx = self.next_idx
-
-    def update_next_idx(self):
-        if self.idx == 0:
-            # 0 : ['assign', ['id', 'i'],['number', 0.0], 3]
-            self.next_idx = 1
-        elif self.idx == 1:
-            # 1 : ['for-condition', 'i', '<', ['id', 'count'], 3]
-            self.next_idx = 3
-        elif self.idx == 2:
-            # 2 : ['increment', ['id', 'i'], 3]
-            self.next_idx = 1
-        else:
-            # 3 ~ : stmts in for loop
-            self.next_idx = self.idx + 1
-            if self.next_idx >= len(self.stmts):
-                self.next_idx = 2
+        elif self.type is ScopeType.FOR:
+            if self.idx == 0:
+                # 0 : ['assign', ['id', 'i'],['number', 0.0], 3]
+                self.next_idx = 1
+            elif self.idx == 1:
+                # 1 : ['for-condition', 'i', '<', ['id', 'count'], 3]
+                self.next_idx = 3
+            elif self.idx == 2:
+                # 2 : ['increment', ['id', 'i'], 3]
+                self.next_idx = 1
+            else:
+                # 3 ~ : stmts in for loop
+                self.next_idx = self.idx + 1
+                if self.next_idx >= len(self.stmts):
+                    self.next_idx = 2
 
     def set_done(self):
         self.is_condition_true = False
@@ -259,10 +239,7 @@ def next_stmt():
     stmt = scope.stmts[scope.idx]
 #    print(stmt)
 
-    if isinstance(scope, ForScope):
-        scope.update_next_idx()
-
-    if isinstance(scope, IfScope):
+    if isinstance(scope, SubScope):
         scope.update_next_idx()
 
     behavior = stmt[0]
@@ -293,10 +270,11 @@ def next_stmt():
         finished, value = next_expr(func, expr)
         if finished:
             var.assign(value, lineno)
-            if isinstance(scope, ForScope):
-                if lineno == scope.line_no[0]:
-                    scope.update_idx()
-                    next_stmt()
+            if isinstance(scope, SubScope):
+                if scope.type is ScopeType.FOR:
+                    if lineno == scope.line_no[0]:
+                        scope.update_idx()
+                        next_stmt()
             LAST_LINE = lineno
             scope.idx += 1
 
@@ -310,10 +288,11 @@ def next_stmt():
             raise PException(f"Varaible {var_info[1]} not found")
         value = var.value
         var.assign(value + 1, lineno)
-        if isinstance(scope, ForScope):
-            if lineno == scope.line_no[0]:
-                scope.update_idx()
-                next_stmt()
+        if isinstance(scope, SubScope):
+            if scope.type is ScopeType.FOR:
+                if lineno == scope.line_no[0]:
+                    scope.update_idx()
+                    next_stmt()
         LAST_LINE = lineno
         scope.idx += 1
 
@@ -325,7 +304,9 @@ def next_stmt():
                 stmts,
                 [3, 5]]
         '''
-        func.stack.push(ForScope(stmt[1:-1], stmt[-1]))
+        func.stack.push(SubScope(stmt[1:-1], stmt[-1],ScopeType.FOR))
+        lineno = stmt[-1][0]
+        LAST_LINE = lineno
         next_stmt()
     elif behavior == "if":
         '''
@@ -333,7 +314,7 @@ def next_stmt():
                stmts,
                [21, 23]]
         '''
-        func.stack.push(IfScope(stmt[1:-1], stmt[-1]))
+        func.stack.push(SubScope(stmt[1:-1], stmt[-1], ScopeType.IF))
         lineno = stmt[-1][0]
         LAST_LINE = lineno
         next_stmt()
@@ -416,10 +397,7 @@ def next_stmt():
         else:
             raise PException(f"For condition({condition}) is invalid", stmt[4])
 
-    if isinstance(scope, IfScope):
-        scope.update_idx()
-
-    if isinstance(scope, ForScope):
+    if isinstance(scope, SubScope):
         scope.update_idx()
 
     while not MAIN_STACK.isEmpty():
@@ -434,10 +412,7 @@ def next_stmt():
             next_scope = func.stack.top()
             # if current scope is done, next scope must increase statement index
             if next_scope is not None:
-                if isinstance(next_scope, ForScope):
-                    # do nothing
-                    pass
-                elif isinstance(next_scope, IfScope):
+                if isinstance(next_scope, SubScope):
                     # do nothing
                     pass
                 else:
@@ -493,7 +468,7 @@ def interpret(tree):
 
 def process():
     global PLAIN_CODE
-    f = open("inputs/input9.c", "r")
+    f = open("inputs/input10.c", "r")
     PLAIN_CODE = f.readlines()
     code = "".join(PLAIN_CODE)
     PLAIN_CODE = [""] + PLAIN_CODE # PLAIN_CODE[1] indicates Line 1
