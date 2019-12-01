@@ -65,7 +65,6 @@ class Scope:
         self.stmts = copy.deepcopy(stmts)
         self.type = type
         self.idx = 0
-        self.declared_vars = []
         self.dest = None # Where the return value had to be located
 
     def is_done(self):
@@ -76,9 +75,9 @@ class SubScope(Scope):
         # create condition stmt
         new_stmt = copy.deepcopy(stmts)
         if scope_type is ScopeType.IF:
-            new_stmt[0].insert(0, 'if-condition')
+            new_stmt[0].insert(0, 'condition')
         elif scope_type is ScopeType.FOR:
-            new_stmt[1].insert(0, 'for-condition')
+            new_stmt[1].insert(0, 'condition')
 
             # set valid line number in increment
             new_stmt[2][-1] = new_stmt[0][-1]
@@ -92,7 +91,7 @@ class SubScope(Scope):
         self.line_no = copy.deepcopy(line_no)
         self.is_condition_true = True
         self.next_idx = 0
-        self.type = scope_type
+        self.declared_vars = []
 
     def update_idx(self):
         self.idx = self.next_idx
@@ -252,10 +251,22 @@ def next_stmt():
         '''
         var_type, var_list, lineno = stmt[1:]
         for var in var_list:
-            scope.declared_vars.append(var[1])
-            func.declare_var(var_type, var[1], lineno)
-
-        LAST_LINE = lineno
+            skip = 0
+            if isinstance(scope, SubScope):
+                if not var[1] in scope.declared_vars:
+                    scope.declared_vars.append(var[1])
+                    func.declare_var(var_type, var[1], lineno)
+                else:
+                    if scope.type is ScopeType.FOR:
+                        skip = 1
+                        scope.update_idx()
+                        next_stmt()
+                    else:
+                        raise PException(f"Double declaration in if-statement!")
+            else:
+                func.declare_var(var_type, var[1], lineno)
+        # Declaration in for-statement invoked once at first.
+        LAST_LINE = lineno + skip
         scope.idx += 1
         pass
 
@@ -347,34 +358,9 @@ def next_stmt():
         ['return', ['/', ['id', 'total'], ['id', 'count']], 6]
         '''
         pass
-    elif behavior == "if-condition":
+    elif behavior == "condition":
         '''
-        ['if-condition', 'a', '>', ['number', 0.0], 3]
-        '''
-        success, right_value = next_expr(func, stmt[3])
-        if success == False:
-            pass
-
-        left_value, condition = func.get_var(stmt[1]).value, stmt[2]
-        condition = stmt[2]
-
-        if condition == '>':
-            if left_value > right_value:
-                # do nothing
-                pass
-            else:
-                scope.set_done()
-        elif condition == '<':
-            if left_value < right_value:
-                # do nothing
-                pass
-            else:
-                scope.set_done()
-        else:
-            raise PException(f"For condition({condition}) is invalid", stmt[4])
-    elif behavior == "for-condition":
-        '''
-        ['for-condition', 'i', '<', ['id', 'count'], 3]
+        ['condition', 'a', '>', ['number', 0.0], 3]
         '''
         success, right_value = next_expr(func, stmt[3])
         if success == False:
@@ -382,6 +368,8 @@ def next_stmt():
             pass
 
         left_value, condition = func.get_var(stmt[1]).value, stmt[2]
+        condition = stmt[2]
+
         if condition == '>':
             if left_value > right_value:
                 # do nothing
@@ -408,6 +396,9 @@ def next_stmt():
 
         scope = func.stack.top()
         if scope.is_done():
+            if isinstance(scope, SubScope):
+                for var in scope.declared_vars:
+                    func.release_var(var)
             func.stack.pop()
             next_scope = func.stack.top()
             # if current scope is done, next scope must increase statement index
@@ -468,7 +459,7 @@ def interpret(tree):
 
 def process():
     global PLAIN_CODE
-    f = open("inputs/input10.c", "r")
+    f = open("inputs/input12.c", "r")
     PLAIN_CODE = f.readlines()
     code = "".join(PLAIN_CODE)
     PLAIN_CODE = [""] + PLAIN_CODE # PLAIN_CODE[1] indicates Line 1

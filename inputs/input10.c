@@ -1,6 +1,5 @@
 int main(void) {
     int count, i, sum;
-    float average;
 
     count = 4;
     sum = 0;
