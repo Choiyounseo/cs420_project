@@ -71,6 +71,41 @@ class Scope:
     def is_done(self):
         return self.idx == len(self.stmts)
 
+class IfScope(Scope):
+    def __init__(self, stmts, line_no):
+        # create for-condition stmt
+        new_stmt = copy.deepcopy(stmts)
+        new_stmt[0].insert(0, 'if-condition')
+
+        # break down single-for-loop-stmts into multiple-stmts
+        sub_stmts = copy.deepcopy(new_stmt[-1])
+        new_stmt.pop()
+        new_stmt += sub_stmts
+
+        super(IfScope, self).__init__(new_stmt, ScopeType.IF)
+        self.line_no = copy.deepcopy(line_no)
+        self.is_condition_true = True
+        self.next_idx = 0
+
+    def update_idx(self):
+        self.idx = self.next_idx
+
+    def update_next_idx(self):
+        if self.idx == 0:
+            # 0 : ['if-condition', 'a', '3', ['number', 1.0], 3]
+            self.next_idx = 1
+        else:
+            # 1 ~ : stmts in if scope
+            self.next_idx = self.idx + 1
+            if self.next_idx >= len(self.stmts):
+                self.set_done()
+
+    def set_done(self):
+        self.is_condition_true = False
+
+    def is_done(self):
+        return not self.is_condition_true
+
 class ForScope(Scope):
     def __init__(self, stmts, line_no):
         # create for-condition stmt
@@ -227,6 +262,8 @@ def next_stmt():
     if isinstance(scope, ForScope):
         scope.update_next_idx()
 
+        scope.update_next_idx()
+
     behavior = stmt[0]
     if behavior == "declare":
         '''
@@ -242,6 +279,7 @@ def next_stmt():
 
         LAST_LINE = lineno
         scope.idx += 1
+        pass
 
     elif behavior == "assign":
         '''
@@ -254,6 +292,10 @@ def next_stmt():
         finished, value = next_expr(func, expr)
         if finished:
             var.assign(value, lineno)
+            if isinstance(scope, ForScope):
+                if lineno == scope.line_no[0]:
+                    scope.update_idx()
+                    next_stmt()
             LAST_LINE = lineno
             scope.idx += 1
 
@@ -267,6 +309,10 @@ def next_stmt():
             raise PException(f"Varaible {var_info[1]} not found")
         value = var.value
         var.assign(value + 1, lineno)
+        if isinstance(scope, ForScope):
+            if lineno == scope.line_no[0]:
+                scope.update_idx()
+                next_stmt()
         LAST_LINE = lineno
         scope.idx += 1
 
@@ -286,7 +332,10 @@ def next_stmt():
                stmts,
                [21, 23]]
         '''
-        pass
+        func.stack.push(IfScope(stmt[1:-1], stmt[-1]))
+        lineno = stmt[-1][0]
+        LAST_LINE = lineno
+        next_stmt()
     elif behavior == "functcall":
         '''
         ['functcall', 'printf',
@@ -316,6 +365,31 @@ def next_stmt():
         ['return', ['/', ['id', 'total'], ['id', 'count']], 6]
         '''
         pass
+    elif behavior == "if-condition":
+        '''
+        ['if-condition', 'a', '>', ['number', 0.0], 3]
+        '''
+        success, right_value = next_expr(func, stmt[3])
+        if success == False:
+            pass
+
+        left_value, condition = func.get_var(stmt[1]).value, stmt[2]
+        condition = stmt[2]
+
+        if condition == '>':
+            if left_value > right_value:
+                # do nothing
+                pass
+            else:
+                scope.set_done()
+        elif condition == '<':
+            if left_value < right_value:
+                # do nothing
+                pass
+            else:
+                scope.set_done()
+        else:
+            raise PException(f"For condition({condition}) is invalid", stmt[4])
     elif behavior == "for-condition":
         '''
         ['for-condition', 'i', '<', ['id', 'count'], 3]
@@ -341,6 +415,9 @@ def next_stmt():
         else:
             raise PException(f"For condition({condition}) is invalid", stmt[4])
 
+    if isinstance(scope, IfScope):
+        scope.update_idx()
+
     if isinstance(scope, ForScope):
         scope.update_idx()
 
@@ -357,6 +434,9 @@ def next_stmt():
             # if current scope is done, next scope must increase statement index
             if next_scope is not None:
                 if isinstance(next_scope, ForScope):
+                    # do nothing
+                    pass
+                elif isinstance(next_scope, IfScope):
                     # do nothing
                     pass
                 else:
@@ -412,7 +492,7 @@ def interpret(tree):
 
 def process():
     global PLAIN_CODE
-    f = open("inputs/input0.c", "r")
+    f = open("inputs/input9.c", "r")
     PLAIN_CODE = f.readlines()
     code = "".join(PLAIN_CODE)
     PLAIN_CODE = [""] + PLAIN_CODE # PLAIN_CODE[1] indicates Line 1
