@@ -262,6 +262,7 @@ def next_stmt():
     if isinstance(scope, ForScope):
         scope.update_next_idx()
 
+    if isinstance(scope, IfScope):
         scope.update_next_idx()
 
     behavior = stmt[0]
