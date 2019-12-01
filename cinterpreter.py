@@ -99,7 +99,7 @@ class SubScope(Scope):
     def update_next_idx(self):
         if self.type is ScopeType.IF:
             if self.idx == 0:
-                # 0 : ['if-condition', 'a', '3', ['number', 1.0], 3]
+                # 0 : ['condition', 'a', '3', ['number', 1.0], 3]
                 self.next_idx = 1
             else:
                 # 1 ~ : stmts in if scope
@@ -112,7 +112,7 @@ class SubScope(Scope):
                 # 0 : ['assign', ['id', 'i'],['number', 0.0], 3]
                 self.next_idx = 1
             elif self.idx == 1:
-                # 1 : ['for-condition', 'i', '<', ['id', 'count'], 3]
+                # 1 : ['condition', 'i', '<', ['id', 'count'], 3]
                 self.next_idx = 3
             elif self.idx == 2:
                 # 2 : ['increment', ['id', 'i'], 3]
