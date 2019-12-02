@@ -55,6 +55,17 @@ class VAR:
         self.history.append([lineno, value])
         self.value = value
 
+class CPI:
+    def __init__(self, lineno):
+        self.rhs = None
+        self.lineno = lineno
+        # rhs can be variable or direct number
+
+    def assign(self, new_rhs, new_lineno):
+        self.rhs = new_rhs
+        self.lineno = new_lineno
+
+
 class ScopeType(enum.Enum):
     FUNC = 0
     IF = 1
@@ -132,10 +143,14 @@ class SubScope(Scope):
 class Function:
     def __init__(self):
         self.vars = {}
+        self.cpis = {}
+        self.ceis = {}
         self.stack = Stack()
 
     def __init__(self, func, args=[]):
         self.vars = {}
+        self.cpis = {}
+        self.ceis = {}
         self.stack = Stack()
 
         name = func[2]
@@ -176,19 +191,52 @@ class Function:
         if len(self.vars[var_name]) == 0:
             self.vars.pop(var_name, None)
 
+    def declare_cpi(self, var_name, lineno):
+        cpi = CPI(lineno)
+        if not var_name in self.cpis:
+            self.cpis[var_name] = []
+        self.cpis[var_name].append(cpi)
+
+    def get_cpi(self, id):
+        if not id in self.cpis:
+            return None
+
+        return self.cpis[id][-1]
+
+    def release_cpi(self, var_name):
+        self.cpis[var_name].pop()
+        if len(self.cpis[var_name]) == 0:
+            self.cpis.pop(var_name, None)
+
+
 # return finished, value.
 # If there's another functcall in expr, it return False, None
 # Otherwise return True, value
-def next_expr(func, expr):
+def next_expr(func, expr, lineno):
     global LAST_LINE
+    global cp_list
 
     behavior = expr[0]
     if behavior == 'number':
         return True, expr[1]
     elif behavior == 'id':
         var = func.get_var(expr[1])
-        if var == None:
+        cpi = func.get_cpi(expr[1])
+        if var is None:
             raise PException(f"Varaible {expr[1]} not found")
+
+        if cpi is None:
+            raise PException(f"Declared variable {expr[1]} doesn't have cpi")
+
+        if cpi.rhs is not None:
+            if not expr[1] in cp_list:
+                cp_list[expr[1]] = {}
+            if not cpi in cp_list[expr[1]]:
+                cp_list[expr[1]][cpi.rhs] = []
+            if not lineno in cp_list[expr[1]][cpi.rhs]:
+                cp_list[expr[1]][cpi.rhs].append(lineno)
+                print(f"{lineno} : for {expr[1]}, cpi.rhs is {cpi.rhs}")
+
         return True, var.value
     elif behavior == 'functcall':
         func.dest = []
@@ -196,7 +244,7 @@ def next_expr(func, expr):
         expr = func.dest
         return None, False
     elif behavior == 'casting':
-        finished, value = next_expr(func, expr[2])
+        finished, value = next_expr(func, expr[2], lineno)
         if not finished:
             return False, None
         if expr[1] == 'int':
@@ -205,10 +253,10 @@ def next_expr(func, expr):
             return True, float(value)
         raise PException(f"Invalid casting {expr[1]}")
     else:
-        finished, value1 = next_expr(func, expr[1])
+        finished, value1 = next_expr(func, expr[1], lineno)
         if not finished:
             return False, None
-        finished, value2 = next_expr(func, expr[2])
+        finished, value2 = next_expr(func, expr[2], lineno)
         if not finished:
             return False, None
 
@@ -229,6 +277,7 @@ def next_expr(func, expr):
 
 def next_stmt():
     global LAST_LINE
+    global cp_list
 
     func = MAIN_STACK.top()
     if func is None:
@@ -256,6 +305,7 @@ def next_stmt():
                 if not var[1] in scope.declared_vars:
                     scope.declared_vars.append(var[1])
                     func.declare_var(var_type, var[1], lineno)
+                    func.declare_cpi(var[1], lineno)
                 else:
                     if scope.type is ScopeType.FOR:
                         skip = 1
@@ -265,6 +315,7 @@ def next_stmt():
                         raise PException(f"Double declaration in if-statement!")
             else:
                 func.declare_var(var_type, var[1], lineno)
+                func.declare_cpi(var[1], lineno)
         # Declaration in for-statement invoked once at first.
         LAST_LINE = lineno + skip
         scope.idx += 1
@@ -276,11 +327,24 @@ def next_stmt():
         '''
         var_info, expr, lineno = stmt[1:]
         var = func.get_var(var_info[1])
+        cpi = func.get_cpi(var_info[1])
+
         if var == None:
-            raise PException(f"Varaible {var_info[1]} not found")
-        finished, value = next_expr(func, expr)
+            raise PException(f"Variable {var_info[1]} not found")
+        finished, value = next_expr(func, expr, lineno)
         if finished:
             var.assign(value, lineno)
+            # Update copy propagation information
+            if expr[0] is 'number':
+                # direct assignment
+                cpi.assign(expr[1], lineno)
+            elif expr[0] is 'id':
+                cpi.assign(expr[1], lineno)
+            else:
+                cpi.assign(None, lineno)
+            for var_name in func.cpis:
+                if func.cpis[var_name][-1].rhs is var_info[1]:
+                    func.cpis[var_name][-1].assign(None, lineno)
             if isinstance(scope, SubScope):
                 if scope.type is ScopeType.FOR:
                     if lineno == scope.line_no[0]:
@@ -297,6 +361,8 @@ def next_stmt():
         var = func.get_var(var_info[1])
         if var == None:
             raise PException(f"Varaible {var_info[1]} not found")
+        if cpi == None:
+            raise PException(f"Declared variable {var_info[1]} doesn't have cpi")
         value = var.value
         var.assign(value + 1, lineno)
         if isinstance(scope, SubScope):
@@ -362,7 +428,7 @@ def next_stmt():
         '''
         ['condition', 'a', '>', ['number', 0.0], 3]
         '''
-        success, right_value = next_expr(func, stmt[3])
+        success, right_value = next_expr(func, stmt[3], stmt[4])
         if success == False:
             # TODO : need to test case that includes functcall in right expression
             pass
@@ -383,7 +449,7 @@ def next_stmt():
             else:
                 scope.set_done()
         else:
-            raise PException(f"For condition({condition}) is invalid", stmt[4])
+            raise PException(f"condition({condition}) is invalid", stmt[4])
 
     if isinstance(scope, SubScope):
         scope.update_idx()
@@ -399,6 +465,7 @@ def next_stmt():
             if isinstance(scope, SubScope):
                 for var in scope.declared_vars:
                     func.release_var(var)
+                    func.release_cpi(var)
             func.stack.pop()
             next_scope = func.stack.top()
             # if current scope is done, next scope must increase statement index
@@ -412,6 +479,8 @@ def next_stmt():
         break
 
 def interpret(tree):
+    global cp_list
+    cp_list = {}
     # Function index
     func = {}
     for func_info in tree:
@@ -459,7 +528,7 @@ def interpret(tree):
 
 def process():
     global PLAIN_CODE
-    f = open("inputs/input12.c", "r")
+    f = open("inputs/copy_propagation5.c", "r")
     PLAIN_CODE = f.readlines()
     code = "".join(PLAIN_CODE)
     PLAIN_CODE = [""] + PLAIN_CODE # PLAIN_CODE[1] indicates Line 1
