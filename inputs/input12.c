@@ -11,7 +11,7 @@ int main(void) {
         	sum = 999;
         }
         if(i > 0){
-        sum = sum + 1;	
+            sum = sum + 1;	
         }			
     	printf("%d\n",sum);
     }
