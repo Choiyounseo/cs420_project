@@ -103,7 +103,7 @@ class SubScope(Scope):
         self.is_condition_true = True
         self.next_idx = 0
         self.declared_vars = []
-
+        self.assigned_vars = []
     def update_idx(self):
         self.idx = self.next_idx
 
@@ -235,7 +235,6 @@ def next_expr(func, expr, lineno):
                 cp_list[expr[1]][cpi.rhs] = []
             if not lineno in cp_list[expr[1]][cpi.rhs]:
                 cp_list[expr[1]][cpi.rhs].append(lineno)
-                print(f"{lineno} : for {expr[1]}, cpi.rhs is {cpi.rhs}")
 
         return True, var.value
     elif behavior == 'functcall':
@@ -299,21 +298,22 @@ def next_stmt():
             ], 2]
         '''
         var_type, var_list, lineno = stmt[1:]
+        skip = 1
         for var in var_list:
-            skip = 0
             if isinstance(scope, SubScope):
                 if not var[1] in scope.declared_vars:
+                    skip = 0
                     scope.declared_vars.append(var[1])
                     func.declare_var(var_type, var[1], lineno)
                     func.declare_cpi(var[1], lineno)
                 else:
                     if scope.type is ScopeType.FOR:
-                        skip = 1
                         scope.update_idx()
                         next_stmt()
                     else:
                         raise PException(f"Double declaration in if-statement!")
             else:
+                skip = 0
                 func.declare_var(var_type, var[1], lineno)
                 func.declare_cpi(var[1], lineno)
         # Declaration in for-statement invoked once at first.
@@ -331,25 +331,35 @@ def next_stmt():
 
         if var == None:
             raise PException(f"Variable {var_info[1]} not found")
+        if cpi == None:
+            raise PException(f"Declared variable {var_info[1]} doesn't have cpi")
         finished, value = next_expr(func, expr, lineno)
         if finished:
             var.assign(value, lineno)
             # Update copy propagation information
+
+            # direct assignment
             if expr[0] is 'number':
-                # direct assignment
                 cpi.assign(expr[1], lineno)
             elif expr[0] is 'id':
                 cpi.assign(expr[1], lineno)
+            # cpi should be erased if not direct assignment
             else:
                 cpi.assign(None, lineno)
+            # cpi should be erased if it has just assigned variable as rhs
             for var_name in func.cpis:
                 if func.cpis[var_name][-1].rhs is var_info[1]:
                     func.cpis[var_name][-1].assign(None, lineno)
+
             if isinstance(scope, SubScope):
+                # assignment in for() is executed with other statements which in the same line
                 if scope.type is ScopeType.FOR:
                     if lineno == scope.line_no[0]:
                         scope.update_idx()
                         next_stmt()
+                # copy propagation cannot be from inner scope to outer scope
+                if not var_info[1] in scope.assigned_vars:
+                    scope.assigned_vars.append(var_info[1])
             LAST_LINE = lineno
             scope.idx += 1
 
@@ -359,12 +369,20 @@ def next_stmt():
         '''
         var_info, lineno = stmt[1:]
         var = func.get_var(var_info[1])
+        cpi = func.get_cpi(var_info[1])
         if var == None:
             raise PException(f"Varaible {var_info[1]} not found")
         if cpi == None:
             raise PException(f"Declared variable {var_info[1]} doesn't have cpi")
         value = var.value
         var.assign(value + 1, lineno)
+
+        # cpi should be erased if it has just assigned variable as rhs
+        for var_name in func.cpis:
+            if func.cpis[var_name][-1].rhs is var_info[1]:
+                func.cpis[var_name][-1].assign(None, lineno)
+
+        # increment in for() is executed with other statements which in the same line
         if isinstance(scope, SubScope):
             if scope.type is ScopeType.FOR:
                 if lineno == scope.line_no[0]:
@@ -451,6 +469,10 @@ def next_stmt():
         else:
             raise PException(f"condition({condition}) is invalid", stmt[4])
 
+    for var_name in cp_list:
+        for rhs in cp_list[var_name]:
+            print(f"{var_name} = {rhs} need to be applied to the lines {cp_list[var_name][rhs]}")
+
     if isinstance(scope, SubScope):
         scope.update_idx()
 
@@ -463,6 +485,8 @@ def next_stmt():
         scope = func.stack.top()
         if scope.is_done():
             if isinstance(scope, SubScope):
+                for var in scope.assigned_vars:
+                    func.cpis[var][-1].assign(None, LAST_LINE)
                 for var in scope.declared_vars:
                     func.release_var(var)
                     func.release_cpi(var)
