@@ -1,9 +1,10 @@
 int main(void) {
-    int a = 1;
+    int a;
     int b;
+    a = 1;
     for(b = 0; b < 10; b ++) {
         int a;
         a = 2;
     }
-    c = a;
+    c = 1;
 }
