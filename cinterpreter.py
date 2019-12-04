@@ -65,6 +65,13 @@ class CPI:
         self.rhs = new_rhs
         self.lineno = new_lineno
 
+class CSI:
+    def __init__(self, used_vars, lineno):
+        self.used_vars = used_vars
+        self.lines = [lineno]
+
+    def add_line(self, new_line):
+        self.lines.append(new_line)
 
 class ScopeType(enum.Enum):
     FUNC = 0
@@ -110,7 +117,7 @@ class SubScope(Scope):
     def update_next_idx(self):
         if self.type is ScopeType.IF:
             if self.idx == 0:
-                # 0 : ['condition', 'a', '3', ['number', 1.0], 3]
+                # 0 : ['condition', 'a', '3', ['number', 0, '0'], 3]
                 self.next_idx = 1
             else:
                 # 1 ~ : stmts in if scope
@@ -120,7 +127,7 @@ class SubScope(Scope):
 
         elif self.type is ScopeType.FOR:
             if self.idx == 0:
-                # 0 : ['assign', ['id', 'i'],['number', 0.0], 3]
+                # 0 : ['assign', ['id', 'i'],['number', 0, '0'], 3]
                 self.next_idx = 1
             elif self.idx == 1:
                 # 1 : ['condition', 'i', '<', ['id', 'count'], 3]
@@ -144,13 +151,13 @@ class Function:
     def __init__(self):
         self.vars = {}
         self.cpis = {}
-        self.ceis = {}
+        self.csis = {}
         self.stack = Stack()
 
     def __init__(self, func, args=[]):
         self.vars = {}
         self.cpis = {}
-        self.ceis = {}
+        self.csis = {}
         self.stack = Stack()
 
         name = func[2]
@@ -180,11 +187,10 @@ class Function:
             self.vars[var_name] = []
         self.vars[var_name].append(var)
 
-    def get_var(self, id):
-        if not id in self.vars:
+    def get_var(self, var_name):
+        if not var_name in self.vars:
             return None
-
-        return self.vars[id][-1]
+        return self.vars[var_name][-1]
 
     def release_var(self, var_name):
         self.vars[var_name].pop()
@@ -197,17 +203,38 @@ class Function:
             self.cpis[var_name] = []
         self.cpis[var_name].append(cpi)
 
-    def get_cpi(self, id):
-        if not id in self.cpis:
+    def get_cpi(self, var_name):
+        if not var_name in self.cpis:
             return None
-
-        return self.cpis[id][-1]
+        return self.cpis[var_name][-1]
 
     def release_cpi(self, var_name):
         self.cpis[var_name].pop()
         if len(self.cpis[var_name]) == 0:
             self.cpis.pop(var_name, None)
 
+    def declare_csi(self, expr_str, used_var, lineno):
+        csi = CSI(used_var, lineno)
+        if not expr_str in self.csis:
+            self.csis[expr_str] = []
+        self.csis[expr_str].append(csi)
+
+    def add_csi(self, var):
+        for expr_str in self.csis:
+            for arg in self.csis[expr_str][-1].used_var:
+                if arg is var:
+                    csi = CSI(self.csis[expr_str][-1].used_var, -1)
+                    self.csis[expr_str].append(csi)
+
+    def get_csi(self, expr_str):
+        if not expr_str in self.csis:
+            return None
+        return self.csis[expr_str][-1]
+
+    def release_csi(self, expr_str):
+        self.csis[expr_str].pop()
+        if len(self.csis[expr_str]) == 0:
+            self.csis.pop(expr_str, None)
 
 # return finished, value.
 # If there's another functcall in expr, it return False, None
@@ -215,16 +242,17 @@ class Function:
 def next_expr(func, expr, lineno):
     global LAST_LINE
     global cp_list
+    global cs_list
 
     behavior = expr[0]
     if behavior == 'number':
         return True, expr[1]
     elif behavior == 'id':
         var = func.get_var(expr[1])
-        cpi = func.get_cpi(expr[1])
         if var is None:
             raise PException(f"Varaible {expr[1]} not found")
 
+        cpi = func.get_cpi(expr[1])
         if cpi is None:
             raise PException(f"Declared variable {expr[1]} doesn't have cpi")
 
@@ -293,8 +321,8 @@ def next_stmt():
     if behavior == "declare":
         '''
         ['declare', 'int', [
-                ['id', 'i'],
-                ['id', 'total']
+                ['id', ['i'], 'i'],
+                ['id', ['total'] 'total']
             ], 2]
         '''
         var_type, var_list, lineno = stmt[1:]
@@ -306,6 +334,7 @@ def next_stmt():
                     scope.declared_vars.append(var[1])
                     func.declare_var(var_type, var[1], lineno)
                     func.declare_cpi(var[1], lineno)
+                    func.add_csi(var[1])
                 else:
                     if scope.type is ScopeType.FOR:
                         scope.update_idx()
@@ -323,7 +352,7 @@ def next_stmt():
 
     elif behavior == "assign":
         '''
-        ['assign', ['id', 'count'], expr, 0]
+        ['assign', ['id', ['count'], 'count'], expr, 0]
         '''
         var_info, expr, lineno = stmt[1:]
         var = func.get_var(var_info[1])
@@ -346,7 +375,7 @@ def next_stmt():
             # cpi should be erased if not direct assignment
             else:
                 cpi.assign(None, lineno)
-            # cpi should be erased if it has just assigned variable as rhs
+            # cpi should be deleted if it has just assigned variable as rhs
             for var_name in func.cpis:
                 if func.cpis[var_name][-1].rhs is var_info[1]:
                     func.cpis[var_name][-1].assign(None, lineno)
@@ -393,7 +422,7 @@ def next_stmt():
 
     elif behavior == "for":
         '''
-        ['for', ['assign', ['id', 'i'],['number', 0.0], 3],
+        ['for', ['assign', ['id', 'i'],['number', 0.0, '0.0'], 3],
                 ['i', '<', ['id', 'count'], 3],
                 ['increment', ['id', 'i'], 3],
                 stmts,
@@ -405,7 +434,7 @@ def next_stmt():
         next_stmt()
     elif behavior == "if":
         '''
-        ['if', ['average', '>', ['number', 40.0], 21],
+        ['if', ['average', '>', ['number', 40.0, '40.0'], 21],
                stmts,
                [21, 23]]
         '''
@@ -416,10 +445,10 @@ def next_stmt():
     elif behavior == "functcall":
         '''
         ['functcall', 'printf',
-                        ['args', [['string', '"%f\\n"'], ['id', 'average']]],
+                        ['args', [['string', [], '"%f\\n"'], ['id', ['average'], 'average']]], [
                         22]
         '''
-        callee, args_info, lineno = stmt[1:]
+        callee, args_info, lineno = stmt[1:-1]
         if callee == "printf":
             args_info = args_info[1]
             printf_format = args_info[0][1]
@@ -439,12 +468,12 @@ def next_stmt():
         pass
     elif behavior == "return":
         '''
-        ['return', ['/', ['id', 'total'], ['id', 'count']], 6]
+        ['return', ['/', ['id', ['total'], 'total'], ['id', ['count'], 'count']], 6]
         '''
         pass
     elif behavior == "condition":
         '''
-        ['condition', 'a', '>', ['number', 0.0], 3]
+        ['condition', 'a', '>', ['number', 0.0, [0.0], '0.0'], 3]
         '''
         success, right_value = next_expr(func, stmt[3], stmt[4])
         if success == False:
@@ -469,9 +498,9 @@ def next_stmt():
         else:
             raise PException(f"condition({condition}) is invalid", stmt[4])
 
-    for var_name in cp_list:
+    '''for var_name in cp_list:
         for rhs in cp_list[var_name]:
-            print(f"{var_name} = {rhs} need to be applied to the lines {cp_list[var_name][rhs]}")
+            print(f"{var_name} = {rhs} need to be propagated to the lines {cp_list[var_name][rhs]}")'''
 
     if isinstance(scope, SubScope):
         scope.update_idx()
@@ -552,7 +581,7 @@ def interpret(tree):
 
 def process():
     global PLAIN_CODE
-    f = open("inputs/copy_propagation5.c", "r")
+    f = open("inputs/common_subexpression_elimination0.c", "r")
     PLAIN_CODE = f.readlines()
     code = "".join(PLAIN_CODE)
     PLAIN_CODE = [""] + PLAIN_CODE # PLAIN_CODE[1] indicates Line 1
