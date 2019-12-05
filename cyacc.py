@@ -22,11 +22,11 @@ def p_funclist(p):
 
 # ignore function inside function ..
 def p_func(p):
-    '''func : INT ID LPAREN paramlist RPAREN LBRACE stmtlist RBRACE
-            | FLOAT ID LPAREN paramlist RPAREN LBRACE stmtlist RBRACE
-            | VOID ID LPAREN paramlist RPAREN LBRACE stmtlist RBRACE
+    '''func : INT ID LPAREN paramlist RPAREN lbrace stmtlist rbrace
+            | FLOAT ID LPAREN paramlist RPAREN lbrace stmtlist rbrace
+            | VOID ID LPAREN paramlist RPAREN lbrace stmtlist rbrace
     '''
-    p[0] = ["function", p[1], p[2], ["parameter", p[4]], p[7], [p.lineno(1), p.lineno(8)]]
+    p[0] = ["function", p[1], p[2], ["parameter", p[4]], [p[6]] + p[7] + [p[8]], [p.lineno(1), p.lineno(8)]]
     print_log("p_func: ", p[0])
 
 def p_paramlist(p):
@@ -245,13 +245,13 @@ def p_casting(p):
     print_log("p_casting: ", p[0])
 
 def p_forloop(p):
-    'forloop : FOR LPAREN assign SEMICOLON condition SEMICOLON increment RPAREN LBRACE stmtlist RBRACE'
-    p[0] = ["for", p[3], p[5], p[7], p[10], [p.lineno(1), p.lineno(11)]]
+    'forloop : FOR LPAREN assign SEMICOLON condition SEMICOLON increment RPAREN lbrace stmtlist rbrace'
+    p[0] = ["for", p[3], p[5], p[7], [p[9]] + p[10] + [p[11]], [p.lineno(1), p.lineno(11)]]
     print_log("p_forloop: ", p[0])
 
 def p_if(p):
-    'if : IF LPAREN condition RPAREN LBRACE stmtlist RBRACE'
-    p[0] = ["if", p[3], p[6], [p.lineno(1), p.lineno(7)]]
+    'if : IF LPAREN condition RPAREN lbrace stmtlist rbrace'
+    p[0] = ["if", p[3], [p[5]] + p[6] + [p[7]], [p.lineno(1), p.lineno(7)]]
     print_log("p_if: ", p[0])
 
 def p_condition(p):
@@ -269,6 +269,15 @@ def p_cmp(p):
     p[0] = p[1]
     print_log("p_cmp: ", p[0])
 
+def p_lbrace(p):
+    'lbrace : LBRACE'
+    p[0] = ["{", p.lineno(1)]
+
+def p_rbrace(p):
+    'rbrace : RBRACE'
+    p[0] = ["}", p.lineno(1)]
+
+
 def p_error(p):
     while True:
       tok = parser.token() # get the next token
@@ -284,3 +293,10 @@ clexer = CLexer()
 lexer = clexer.build()
 tokens = clexer.tokens
 parser = yacc.yacc()
+
+if __name__ == '__main__':
+    f = open("inputs/input0.c")
+    code = "".join(f.readlines())
+    f.close()
+
+    print(parser.parse(code, lexer=lexer))
