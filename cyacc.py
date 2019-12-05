@@ -127,7 +127,7 @@ def p_functcall(p):
             func_str += ','
         func_str += arg[-1]
         func_arg_list += arg[-2]
-    p[0] = ["functcall", p[1], ["args", p[3]], p.lineno(1), func_arg_list, func_str]
+    p[0] = ["functcall", p[1], ["args", p[3]], func_arg_list, func_str, p.lineno(1)]
     print_log("p_functcall: ", p[0])
 
 def p_arglist(p):

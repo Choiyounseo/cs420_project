@@ -1,6 +1,8 @@
 int main(void) {
+
     int a;
     a = 2;
+
     printf("%d\n", a);
     a = a + 5 * 2;
     printf("%d\n", a);

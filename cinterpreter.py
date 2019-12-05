@@ -33,7 +33,7 @@ class Stack:
 
 MAIN_STACK = Stack()
 PLAIN_CODE = ""
-LAST_LINE = 0
+CURRENT_LINE = 0
 
 
 class Return:
@@ -111,6 +111,7 @@ class SubScope(Scope):
         self.next_idx = 0
         self.declared_vars = []
         self.assigned_vars = []
+
     def update_idx(self):
         self.idx = self.next_idx
 
@@ -240,7 +241,7 @@ class Function:
 # If there's another functcall in expr, it return False, None
 # Otherwise return True, value
 def next_expr(func, expr, lineno):
-    global LAST_LINE
+    global CURRENT_LINE
     global cp_list
     global cs_list
 
@@ -302,8 +303,8 @@ def next_expr(func, expr, lineno):
             raise PException(f"Invalid operator {expr[0]}")
         return True, value
 
-def next_stmt():
-    global LAST_LINE
+def next_line():
+    global CURRENT_LINE
     global cp_list
 
     func = MAIN_STACK.top()
@@ -311,14 +312,23 @@ def next_stmt():
         return
 
     scope = func.stack.top()
+    
+    CURRENT_LINE += 1
     stmt = scope.stmts[scope.idx]
-#    print(stmt)
+
+    stmt_lineno = stmt[-1]
+    if isinstance(stmt_lineno, list): stmt_lineno = stmt_lineno[0]
+    if CURRENT_LINE < stmt_lineno:
+        return
 
     if isinstance(scope, SubScope):
         scope.update_next_idx()
 
     behavior = stmt[0]
-    if behavior == "declare":
+    if behavior in ["{", "}"]:
+        scope.idx += 1
+
+    elif behavior == "declare":
         '''
         ['declare', 'int', [
                 ['id', ['i'], 'i'],
@@ -338,7 +348,7 @@ def next_stmt():
                 else:
                     if scope.type is ScopeType.FOR:
                         scope.update_idx()
-                        next_stmt()
+                        next_line()
                     else:
                         raise PException(f"Double declaration in if-statement!")
             else:
@@ -346,9 +356,8 @@ def next_stmt():
                 func.declare_var(var_type, var[1], lineno)
                 func.declare_cpi(var[1], lineno)
         # Declaration in for-statement invoked once at first.
-        LAST_LINE = lineno + skip
+        # CURRENT_LINE = lineno + skip
         scope.idx += 1
-        pass
 
     elif behavior == "assign":
         '''
@@ -385,11 +394,10 @@ def next_stmt():
                 if scope.type is ScopeType.FOR:
                     if lineno == scope.line_no[0]:
                         scope.update_idx()
-                        next_stmt()
+                        next_line()
                 # copy propagation cannot be from inner scope to outer scope
                 if not var_info[1] in scope.assigned_vars:
                     scope.assigned_vars.append(var_info[1])
-            LAST_LINE = lineno
             scope.idx += 1
 
     elif behavior == "increment":
@@ -416,8 +424,7 @@ def next_stmt():
             if scope.type is ScopeType.FOR:
                 if lineno == scope.line_no[0]:
                     scope.update_idx()
-                    next_stmt()
-        LAST_LINE = lineno
+                    next_line()
         scope.idx += 1
 
     elif behavior == "for":
@@ -429,9 +436,7 @@ def next_stmt():
                 [3, 5]]
         '''
         func.stack.push(SubScope(stmt[1:-1], stmt[-1],ScopeType.FOR))
-        lineno = stmt[-1][0]
-        LAST_LINE = lineno
-        next_stmt()
+        next_line()
     elif behavior == "if":
         '''
         ['if', ['average', '>', ['number', 40.0, '40.0'], 21],
@@ -439,19 +444,17 @@ def next_stmt():
                [21, 23]]
         '''
         func.stack.push(SubScope(stmt[1:-1], stmt[-1], ScopeType.IF))
-        lineno = stmt[-1][0]
-        LAST_LINE = lineno
-        next_stmt()
+        next_line()
     elif behavior == "functcall":
         '''
         ['functcall', 'printf',
                         ['args', [['string', [], '"%f\\n"'], ['id', ['average'], 'average']]], [
                         22]
         '''
-        callee, args_info, lineno = stmt[1:-1]
+        callee, args_info, ignore, ignore, lineno = stmt[1:]
         if callee == "printf":
             args_info = args_info[1]
-            printf_format = args_info[0][1]
+            printf_format = args_info[0][2]
             args = []
             for arg in args_info[1:]:
                 if arg[0] == 'id':
@@ -463,14 +466,14 @@ def next_stmt():
                     args.append(arg[1])
 
             print(printf_format % tuple(args))
-            LAST_LINE = lineno
             scope.idx += 1
-        pass
+
     elif behavior == "return":
         '''
         ['return', ['/', ['id', ['total'], 'total'], ['id', ['count'], 'count']], 6]
         '''
         pass
+
     elif behavior == "condition":
         '''
         ['condition', 'a', '>', ['number', 0.0, [0.0], '0.0'], 3]
@@ -515,7 +518,7 @@ def next_stmt():
         if scope.is_done():
             if isinstance(scope, SubScope):
                 for var in scope.assigned_vars:
-                    func.cpis[var][-1].assign(None, LAST_LINE)
+                    func.cpis[var][-1].assign(None, CURRENT_LINE)
                 for var in scope.declared_vars:
                     func.release_var(var)
                     func.release_cpi(var)
@@ -532,6 +535,7 @@ def next_stmt():
         break
 
 def interpret(tree):
+    global CURRENT_LINE
     global cp_list
     cp_list = {}
     # Function index
@@ -543,11 +547,13 @@ def interpret(tree):
         raise PException("Main function doesn't exist")
 
     MAIN_STACK.push(Function(func["main"]))
+    CURRENT_LINE = func["main"][-1][0]
 
     while not MAIN_STACK.isEmpty():
         cmd = ""
         while True:
             cmd = input("Input Command(next [number] / print [variable] / trace [variable]): ").strip().split(" ")
+            if cmd == ["next"]: cmd = ["next", "1"]
             if len(cmd) != 2: continue
             if not cmd[0] in ["next", "print", "trace"]: continue
             if cmd[0] == "next" and not cmd[1].isdigit(): continue
@@ -556,7 +562,7 @@ def interpret(tree):
         if cmd[0] == "next":
             cnt = int(cmd[1])
             while cnt > 0:
-                next_stmt()
+                next_line()
                 cnt -= 1
 
         elif cmd[0] == "print":
@@ -575,13 +581,14 @@ def interpret(tree):
             else:
                 print(f"History of {cmd[1]}")
                 for history in var.history:
-                    print(f"Line {history[0]}: {history[1]}")
+                    print(f"{cmd[1]} = {history[1]} at line {history[0]}")
 
-        print(f"Current stmt: (Line {LAST_LINE}) {PLAIN_CODE[LAST_LINE]}")
+        print(f"Current stmt: (Line {CURRENT_LINE}) {PLAIN_CODE[CURRENT_LINE]}")
+    print("End of Program")
 
 def process():
     global PLAIN_CODE
-    f = open("inputs/common_subexpression_elimination0.c", "r")
+    f = open("inputs/input1.c", "r")
     PLAIN_CODE = f.readlines()
     code = "".join(PLAIN_CODE)
     PLAIN_CODE = [""] + PLAIN_CODE # PLAIN_CODE[1] indicates Line 1
