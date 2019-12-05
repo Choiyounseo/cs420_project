@@ -280,6 +280,28 @@ def next_expr(func, expr, lineno):
         elif expr[1] == 'float':
             return True, float(value)
         raise PException(f"Invalid casting {expr[1]}")
+    elif behavior == 'array':
+        finished, value = next_expr(func, expr[2], lineno)
+        if not finished:
+            return None, False
+        replaced_str = expr[1] + '[' + str(value) + ']'
+        var = func.get_var(replaced_str)
+        if var is None:
+            raise PException(f"Array has {expr[1][2]}th member")
+
+        cpi = func.get_cpi(replaced_str)
+        if cpi is None:
+            raise PException(f"{replaced_str} doesn't have cpi")
+
+        if cpi.rhs is not None:
+            if not replaced_str in cp_list:
+                cp_list[replaced_str] = {}
+            if not cpi in cp_list[replaced_str]:
+                cp_list[replaced_str][cpi.rhs] = []
+            if not lineno in cp_list[replaced_str][cpi.rhs]:
+                cp_list[replaced_str][cpi.rhs].append(lineno)
+
+        return True, var.value
     else:
         finished, value1 = next_expr(func, expr[1], lineno)
         if not finished:
@@ -336,25 +358,35 @@ def next_line():
             ], 2]
         '''
         var_type, var_list, lineno = stmt[1:]
-        skip = 1
         for var in var_list:
-            if isinstance(scope, SubScope):
-                if not var[1] in scope.declared_vars:
-                    skip = 0
-                    scope.declared_vars.append(var[1])
-                    func.declare_var(var_type, var[1], lineno)
-                    func.declare_cpi(var[1], lineno)
-                    func.add_csi(var[1])
-                else:
-                    if scope.type is ScopeType.FOR:
-                        scope.update_idx()
-                        next_line()
-                    else:
-                        raise PException(f"Double declaration in if-statement!")
+            if var[0] is 'array':
+                finished, index_value = next_expr(func, var[2], lineno)
+                if not finished:
+                    raise PException(f"array cannot be resolved")
+            elif var[0] is 'id':
+                index_value = 1
             else:
-                skip = 0
-                func.declare_var(var_type, var[1], lineno)
-                func.declare_cpi(var[1], lineno)
+                raise PException(f"wrong declaration")
+            for i in range(0,index_value):
+                if var[0] is 'array':
+                    var_name = var[1] + '[' + str(i) + ']'
+                else:
+                    var_name = var[1]
+                if isinstance(scope, SubScope):
+                    if not var_name in scope.declared_vars:
+                        scope.declared_vars.append(var_name)
+                        func.declare_var(var_type, var_name, lineno)
+                        func.declare_cpi(var_name, lineno)
+                        func.add_csi(var_name)
+                    else:
+                        if scope.type is ScopeType.FOR:
+                            scope.update_idx()
+                            next_line()
+                        else:
+                            raise PException(f"Double declaration in if-statement!")
+                else:
+                    func.declare_var(var_type, var_name, lineno)
+                    func.declare_cpi(var_name, lineno)
         # Declaration in for-statement invoked once at first.
         # CURRENT_LINE = lineno + skip
         scope.idx += 1
@@ -362,15 +394,23 @@ def next_line():
     elif behavior == "assign":
         '''
         ['assign', ['id', ['count'], 'count'], expr, 0]
+        ['assign', ['array', 'mark', ['id', 'i', ['i'], 'i'], ['mark', 'i'], 'mark[i]'], expr, 1]
         '''
         var_info, expr, lineno = stmt[1:]
-        var = func.get_var(var_info[1])
-        cpi = func.get_cpi(var_info[1])
+        if var_info[0] is 'id':
+            lhs = var_info[1]
+        elif var_info[0] is 'array':
+            finished, index_value = next_expr(func, var_info[2], lineno)
+            if not finished:
+                raise PException(f"array cannot be resolved")
+            lhs = var_info[1] + '[' + str(index_value) + ']'
+        var = func.get_var(lhs)
+        cpi = func.get_cpi(lhs)
 
         if var == None:
-            raise PException(f"Variable {var_info[1]} not found")
+            raise PException(f"Variable {lhs} not found")
         if cpi == None:
-            raise PException(f"Declared variable {var_info[1]} doesn't have cpi")
+            raise PException(f"Declared variable {lhs} doesn't have cpi")
         finished, value = next_expr(func, expr, lineno)
         if finished:
             var.assign(value, lineno)
@@ -386,7 +426,7 @@ def next_line():
                 cpi.assign(None, lineno)
             # cpi should be deleted if it has just assigned variable as rhs
             for var_name in func.cpis:
-                if func.cpis[var_name][-1].rhs is var_info[1]:
+                if func.cpis[var_name][-1].rhs is lhs:
                     func.cpis[var_name][-1].assign(None, lineno)
 
             if isinstance(scope, SubScope):
@@ -397,7 +437,7 @@ def next_line():
                         next_line()
                 # copy propagation cannot be from inner scope to outer scope
                 if not var_info[1] in scope.assigned_vars:
-                    scope.assigned_vars.append(var_info[1])
+                    scope.assigned_vars.append(lhs)
             scope.idx += 1
 
     elif behavior == "increment":
@@ -459,6 +499,14 @@ def next_line():
             for arg in args_info[1:]:
                 if arg[0] == 'id':
                     var = func.get_var(arg[1])
+                    if var == None:
+                        raise PException(f"Varaible {var_info[1]} not found")
+                    args.append(var.value)
+                elif arg[0] == 'array':
+                    finished, index_var = next_expr(func, arg[2], lineno)
+                    if not finished:
+                        PException(f"array index cannot be resolved")
+                    var = func.get_var(arg[1]+'['+str(index_var)+']')
                     if var == None:
                         raise PException(f"Varaible {var_info[1]} not found")
                     args.append(var.value)
@@ -588,7 +636,7 @@ def interpret(tree):
 
 def process():
     global PLAIN_CODE
-    f = open("inputs/input1.c", "r")
+    f = open("inputs/input0.c", "r")
     PLAIN_CODE = f.readlines()
     code = "".join(PLAIN_CODE)
     PLAIN_CODE = [""] + PLAIN_CODE # PLAIN_CODE[1] indicates Line 1

@@ -1,6 +1,11 @@
 int main(void) {
 
     int a;
+    int c[2];
+    c[0] = 0;
+    printf("%d\n", c[0]);
+    c[1] = 1;
+
     a = 2;
 
     printf("%d\n", a);

@@ -233,8 +233,9 @@ def p_id(p):
     if len(p) == 2:
         p[0] = ["id", p[1], [p[1]], p[1]]
     else:
-        array_str = p[1][-1] + '[' + p[3][-1] + ']'
-        p[0] = ["array", p[1], p[3], [p[1]], array_str]
+        array_arg_list = list(set([p[1]]) | set(p[3][-2]))
+        array_str = p[1] + '[' + p[3][-1] + ']'
+        p[0] = ["array", p[1], p[3], array_arg_list, array_str]
     print_log("p_factor: ", p[0])
 
 def p_casting(p):
