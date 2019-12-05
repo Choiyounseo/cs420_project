@@ -34,6 +34,8 @@ class Stack:
 MAIN_STACK = Stack()
 PLAIN_CODE = ""
 CURRENT_LINE = 0
+CP_LIST = {}
+CS_LIST = {}
 
 
 class Return:
@@ -69,6 +71,9 @@ class CSI:
     def __init__(self, used_vars, lineno):
         self.used_vars = used_vars
         self.lines = [lineno]
+
+    def assign(self, lineno):
+        self.lines[-1] = lineno
 
     def add_line(self, new_line):
         self.lines.append(new_line)
@@ -214,18 +219,39 @@ class Function:
         if len(self.cpis[var_name]) == 0:
             self.cpis.pop(var_name, None)
 
-    def declare_csi(self, expr_str, used_var, lineno):
-        csi = CSI(used_var, lineno)
+    def access_csi(self, expr_str, used_var, lineno):
+        global CS_LIST
         if not expr_str in self.csis:
-            self.csis[expr_str] = []
-        self.csis[expr_str].append(csi)
+            self.csis[expr_str] = [CSI(used_var, lineno)]
+        elif self.csis[expr_str][-1].lines[-1] is -1:
+            self.csis[expr_str][-1].assign(lineno)
+        else:
+            self.csis[expr_str][-1].add_line(lineno)
+            lineset = self.csis[expr_str][-1].lines
+            if len(lineset) > 1:
+                print(f"expr_str is {expr_str}")
+                if not expr_str in CS_LIST:
+                    CS_LIST[expr_str] = {}
+                CS_LIST[expr_str][lineset[0]] = lineset
+
 
     def add_csi(self, var):
         for expr_str in self.csis:
             for arg in self.csis[expr_str][-1].used_var:
                 if arg is var:
-                    csi = CSI(self.csis[expr_str][-1].used_var, -1)
+                    csi = CSI(self.csis[expr_str][-1].used_vars, -1)
                     self.csis[expr_str].append(csi)
+
+    def del_csi(self, var):
+        remove_list = []
+        for expr_str in self.csis:
+            for arg in self.csis[expr_str][-1].used_vars:
+                if arg == var:
+                    if not expr_str in remove_list:
+                        remove_list.append(expr_str)
+                    break;
+        for expr_str in remove_list:
+            self.release_csi(expr_str)
 
     def get_csi(self, expr_str):
         if not expr_str in self.csis:
@@ -242,8 +268,8 @@ class Function:
 # Otherwise return True, value
 def next_expr(func, expr, lineno):
     global CURRENT_LINE
-    global cp_list
-    global cs_list
+    global CP_LIST
+    global CS_LIST
 
     behavior = expr[0]
     if behavior == 'number':
@@ -258,20 +284,26 @@ def next_expr(func, expr, lineno):
             raise PException(f"Declared variable {expr[1]} doesn't have cpi")
 
         if cpi.rhs is not None:
-            if not expr[1] in cp_list:
-                cp_list[expr[1]] = {}
-            if not cpi in cp_list[expr[1]]:
-                cp_list[expr[1]][cpi.rhs] = []
-            if not lineno in cp_list[expr[1]][cpi.rhs]:
-                cp_list[expr[1]][cpi.rhs].append(lineno)
+            if not expr[1] in CP_LIST:
+                CP_LIST[expr[1]] = {}
+            if not cpi in CP_LIST[expr[1]]:
+                CP_LIST[expr[1]][cpi.rhs] = []
+            if not lineno in CP_LIST[expr[1]][cpi.rhs]:
+                CP_LIST[expr[1]][cpi.rhs].append(lineno)
 
         return True, var.value
     elif behavior == 'functcall':
+        used_vars, expr_str = expr[3:5]
+        func.access_csi(expr_str, used_vars, lineno)
+
         func.dest = []
         # TODO: Push to the stack for functcall
         expr = func.dest
         return None, False
     elif behavior == 'casting':
+        used_vars, expr_str = expr[3:]
+        func.access_csi(expr_str, used_vars, lineno)
+
         finished, value = next_expr(func, expr[2], lineno)
         if not finished:
             return False, None
@@ -281,6 +313,9 @@ def next_expr(func, expr, lineno):
             return True, float(value)
         raise PException(f"Invalid casting {expr[1]}")
     elif behavior == 'array':
+        used_vars, expr_str = expr[3:]
+        func.access_csi(expr_str, used_vars, lineno)
+
         finished, value = next_expr(func, expr[2], lineno)
         if not finished:
             return None, False
@@ -294,15 +329,17 @@ def next_expr(func, expr, lineno):
             raise PException(f"{replaced_str} doesn't have cpi")
 
         if cpi.rhs is not None:
-            if not replaced_str in cp_list:
-                cp_list[replaced_str] = {}
-            if not cpi in cp_list[replaced_str]:
-                cp_list[replaced_str][cpi.rhs] = []
-            if not lineno in cp_list[replaced_str][cpi.rhs]:
-                cp_list[replaced_str][cpi.rhs].append(lineno)
+            if not replaced_str in CP_LIST:
+                CP_LIST[replaced_str] = {}
+            if not cpi in CP_LIST[replaced_str]:
+                CP_LIST[replaced_str][cpi.rhs] = []
+            if not lineno in CP_LIST[replaced_str][cpi.rhs]:
+                CP_LIST[replaced_str][cpi.rhs].append(lineno)
 
         return True, var.value
     else:
+        used_vars, expr_str = expr[3:]
+        func.access_csi(expr_str, used_vars, lineno)
         finished, value1 = next_expr(func, expr[1], lineno)
         if not finished:
             return False, None
@@ -327,14 +364,14 @@ def next_expr(func, expr, lineno):
 
 def next_line():
     global CURRENT_LINE
-    global cp_list
+    global CP_LIST
 
     func = MAIN_STACK.top()
     if func is None:
         return
 
     scope = func.stack.top()
-    
+
     CURRENT_LINE += 1
     stmt = scope.stmts[scope.idx]
 
@@ -428,6 +465,10 @@ def next_line():
             for var_name in func.cpis:
                 if func.cpis[var_name][-1].rhs is lhs:
                     func.cpis[var_name][-1].assign(None, lineno)
+
+            for expr_str in func.csis:
+                if lhs in func.csis[expr_str][-1].used_vars:
+                    func.csis[expr_str][-1].lines = [-1]
 
             if isinstance(scope, SubScope):
                 # assignment in for() is executed with other statements which in the same line
@@ -549,9 +590,13 @@ def next_line():
         else:
             raise PException(f"condition({condition}) is invalid", stmt[4])
 
-    '''for var_name in cp_list:
-        for rhs in cp_list[var_name]:
-            print(f"{var_name} = {rhs} need to be propagated to the lines {cp_list[var_name][rhs]}")'''
+    '''for var_name in CP_LIST:
+        for rhs in CP_LIST[var_name]:
+            print(f"{var_name} = {rhs} need to be propagated to the lines {CP_LIST[var_name][rhs]}")'''
+
+    '''for expr_str in CS_LIST:
+        for first_line in CS_LIST[expr_str]:
+            print(f"{expr_str} is common subexpression to be eliminated for the lines {CS_LIST[expr_str][first_line]}")'''
 
     if isinstance(scope, SubScope):
         scope.update_idx()
@@ -570,6 +615,7 @@ def next_line():
                 for var in scope.declared_vars:
                     func.release_var(var)
                     func.release_cpi(var)
+                    func.del_csi(var)
             func.stack.pop()
             next_scope = func.stack.top()
             # if current scope is done, next scope must increase statement index
@@ -584,8 +630,6 @@ def next_line():
 
 def interpret(tree):
     global CURRENT_LINE
-    global cp_list
-    cp_list = {}
     # Function index
     func = {}
     for func_info in tree:
@@ -636,7 +680,7 @@ def interpret(tree):
 
 def process():
     global PLAIN_CODE
-    f = open("inputs/input0.c", "r")
+    f = open("inputs/common_subexpression_elimination1.c", "r")
     PLAIN_CODE = f.readlines()
     code = "".join(PLAIN_CODE)
     PLAIN_CODE = [""] + PLAIN_CODE # PLAIN_CODE[1] indicates Line 1
