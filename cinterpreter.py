@@ -3,12 +3,14 @@ from os import listdir, path
 import copy
 import enum
 
+
 class PException(Exception):
     def __init__(self, msg, lineno=None):
         if lineno is None:
             Exception.__init__(self, msg)
         else:
             Exception.__init__(self, f"[Line {lineno}] {msg}")
+
 
 class Stack:
     def __init__(self):
@@ -78,10 +80,12 @@ class CSI:
     def add_line(self, new_line):
         self.lines.append(new_line)
 
+
 class ScopeType(enum.Enum):
     FUNC = 0
     IF = 1
     FOR = 2
+
 
 class Scope:
     def __init__(self, stmts, type):
@@ -92,6 +96,7 @@ class Scope:
 
     def is_done(self):
         return self.idx == len(self.stmts)
+
 
 class SubScope(Scope):
     def __init__(self, stmts, line_no, scope_type):
@@ -153,6 +158,7 @@ class SubScope(Scope):
     def is_done(self):
         return not self.is_condition_true
 
+
 class Function:
     def __init__(self):
         self.vars = {}
@@ -189,12 +195,12 @@ class Function:
 
     def declare_var(self, var_type, var_name, lineno):
         var = VAR(var_type, lineno)
-        if not var_name in self.vars:
+        if var_name not in self.vars:
             self.vars[var_name] = []
         self.vars[var_name].append(var)
 
     def get_var(self, var_name):
-        if not var_name in self.vars:
+        if var_name not in self.vars:
             return None
         return self.vars[var_name][-1]
 
@@ -205,12 +211,12 @@ class Function:
 
     def declare_cpi(self, var_name, lineno):
         cpi = CPI(lineno)
-        if not var_name in self.cpis:
+        if var_name not in self.cpis:
             self.cpis[var_name] = []
         self.cpis[var_name].append(cpi)
 
     def get_cpi(self, var_name):
-        if not var_name in self.cpis:
+        if var_name not in self.cpis:
             return None
         return self.cpis[var_name][-1]
 
@@ -233,7 +239,6 @@ class Function:
                 if not expr_str in CS_LIST:
                     CS_LIST[expr_str] = {}
                 CS_LIST[expr_str][lineset[0]] = lineset
-
 
     def add_csi(self, var):
         for expr_str in self.csis:
@@ -263,6 +268,7 @@ class Function:
         if len(self.csis[expr_str]) == 0:
             self.csis.pop(expr_str, None)
 
+
 # return finished, value.
 # If there's another functcall in expr, it return False, None
 # Otherwise return True, value
@@ -284,11 +290,11 @@ def next_expr(func, expr, lineno):
             raise PException(f"Declared variable {expr[1]} doesn't have cpi")
 
         if cpi.rhs is not None:
-            if not expr[1] in CP_LIST:
+            if expr[1] not in CP_LIST:
                 CP_LIST[expr[1]] = {}
-            if not cpi in CP_LIST[expr[1]]:
+            if cpi not in CP_LIST[expr[1]]:
                 CP_LIST[expr[1]][cpi.rhs] = []
-            if not lineno in CP_LIST[expr[1]][cpi.rhs]:
+            if lineno not in CP_LIST[expr[1]][cpi.rhs]:
                 CP_LIST[expr[1]][cpi.rhs].append(lineno)
 
         return True, var.value
@@ -329,11 +335,11 @@ def next_expr(func, expr, lineno):
             raise PException(f"{replaced_str} doesn't have cpi")
 
         if cpi.rhs is not None:
-            if not replaced_str in CP_LIST:
+            if replaced_str not in CP_LIST:
                 CP_LIST[replaced_str] = {}
-            if not cpi in CP_LIST[replaced_str]:
+            if cpi not in CP_LIST[replaced_str]:
                 CP_LIST[replaced_str][cpi.rhs] = []
-            if not lineno in CP_LIST[replaced_str][cpi.rhs]:
+            if lineno not in CP_LIST[replaced_str][cpi.rhs]:
                 CP_LIST[replaced_str][cpi.rhs].append(lineno)
 
         return True, var.value
@@ -361,6 +367,7 @@ def next_expr(func, expr, lineno):
         else:
             raise PException(f"Invalid operator {expr[0]}")
         return True, value
+
 
 def next_line():
     global CURRENT_LINE
@@ -410,7 +417,7 @@ def next_line():
                 else:
                     var_name = var[1]
                 if isinstance(scope, SubScope):
-                    if not var_name in scope.declared_vars:
+                    if var_name not in scope.declared_vars:
                         scope.declared_vars.append(var_name)
                         func.declare_var(var_type, var_name, lineno)
                         func.declare_cpi(var_name, lineno)
@@ -444,9 +451,9 @@ def next_line():
         var = func.get_var(lhs)
         cpi = func.get_cpi(lhs)
 
-        if var == None:
+        if var is None:
             raise PException(f"Variable {lhs} not found")
-        if cpi == None:
+        if cpi is None:
             raise PException(f"Declared variable {lhs} doesn't have cpi")
         finished, value = next_expr(func, expr, lineno)
         if finished:
@@ -488,9 +495,9 @@ def next_line():
         var_info, lineno = stmt[1:]
         var = func.get_var(var_info[1])
         cpi = func.get_cpi(var_info[1])
-        if var == None:
+        if var is None:
             raise PException(f"Varaible {var_info[1]} not found")
-        if cpi == None:
+        if cpi is None:
             raise PException(f"Declared variable {var_info[1]} doesn't have cpi")
         value = var.value
         var.assign(value + 1, lineno)
@@ -535,26 +542,26 @@ def next_line():
         callee, args_info, ignore, ignore, lineno = stmt[1:]
         if callee == "printf":
             args_info = args_info[1]
-            printf_format = args_info[0][2]
+            print_format = args_info[0][2]
             args = []
             for arg in args_info[1:]:
                 if arg[0] == 'id':
                     var = func.get_var(arg[1])
-                    if var == None:
-                        raise PException(f"Varaible {var_info[1]} not found")
+                    if var is None:
+                        raise PException(f"Varaible {args_info[1]} not found")
                     args.append(var.value)
                 elif arg[0] == 'array':
                     finished, index_var = next_expr(func, arg[2], lineno)
                     if not finished:
                         PException(f"array index cannot be resolved")
                     var = func.get_var(arg[1]+'['+str(index_var)+']')
-                    if var == None:
-                        raise PException(f"Varaible {var_info[1]} not found")
+                    if var is None:
+                        raise PException(f"Varaible {args_info[1]} not found")
                     args.append(var.value)
                 elif arg[0] == 'number':
                     args.append(arg[1])
 
-            print(printf_format % tuple(args))
+            print(print_format % tuple(args))
             scope.idx += 1
 
     elif behavior == "return":
@@ -568,7 +575,7 @@ def next_line():
         ['condition', 'a', '>', ['number', 0.0, [0.0], '0.0'], 3]
         '''
         success, right_value = next_expr(func, stmt[3], stmt[4])
-        if success == False:
+        if not success:
             # TODO : need to test case that includes functcall in right expression
             pass
 
@@ -628,6 +635,7 @@ def next_line():
             continue
         break
 
+
 def interpret(tree):
     global CURRENT_LINE
     # Function index
@@ -645,10 +653,15 @@ def interpret(tree):
         cmd = ""
         while True:
             cmd = input("Input Command(next [number] / print [variable] / trace [variable]): ").strip().split(" ")
-            if cmd == ["next"]: cmd = ["next", "1"]
-            if len(cmd) != 2: continue
-            if not cmd[0] in ["next", "print", "trace"]: continue
-            if cmd[0] == "next" and not cmd[1].isdigit(): continue
+            if cmd == ["next"]:
+                cmd = ["next", "1"]
+
+            if len(cmd) != 2:
+                continue
+            if cmd[0] not in ["next", "print", "trace"]:
+                continue
+            if cmd[0] == "next" and not cmd[1].isdigit():
+                continue
             break
 
         if cmd[0] == "next":
@@ -660,7 +673,7 @@ def interpret(tree):
         elif cmd[0] == "print":
             func = MAIN_STACK.top()
             var = func.get_var(cmd[1])
-            if var == None:
+            if var is None:
                 print(f"Variable {cmd[1]} not found")
             else:
                 print(f"Value of {cmd[1]}: {var.value}")
@@ -668,7 +681,7 @@ def interpret(tree):
         elif cmd[0] == "trace":
             func = MAIN_STACK.top()
             var = func.get_var(cmd[1])
-            if var == None:
+            if var is None:
                 print(f"Variable {cmd[1]} not found")
             else:
                 print(f"History of {cmd[1]}")
@@ -677,6 +690,7 @@ def interpret(tree):
 
         print(f"Current stmt: (Line {CURRENT_LINE}) {PLAIN_CODE[CURRENT_LINE]}")
     print("End of Program")
+
 
 def process():
     global PLAIN_CODE
@@ -689,6 +703,7 @@ def process():
     tree = parser.parse(code, lexer=lexer)
 #    print(tree)
     interpret(tree)
+
 
 if __name__ == "__main__":
     try:
