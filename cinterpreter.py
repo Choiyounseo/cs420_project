@@ -38,7 +38,8 @@ PLAIN_CODE = ""
 PLAIN_CODE_ONE_LINE = ""
 CURRENT_LINE = 0
 # Copy Propagation
-CP_LIST = {}
+# (line_no, before_variable, next_variable) of list
+CP_LIST = []
 # Common Subexpression Elimination
 CS_LIST = {}
 
@@ -285,31 +286,29 @@ class Function:
 
 
 def add_cp_id(func, expr, lineno):
+    global CP_LIST
+
     cpi = func.get_cpi(expr[1])
     if cpi is None:
         raise PException(f"Declared variable {expr[1]} doesn't have cpi")
 
-    if cpi.rhs is not None:
-        if expr[1] not in CP_LIST:
-            CP_LIST[expr[1]] = {}
-        if cpi not in CP_LIST[expr[1]]:
-            CP_LIST[expr[1]][cpi.rhs] = []
-        if lineno not in CP_LIST[expr[1]][cpi.rhs]:
-            CP_LIST[expr[1]][cpi.rhs].append(lineno)
+    if cpi.rhs is None:
+        return
+
+    CP_LIST.append((lineno, expr[1], cpi.rhs))
 
 
 def add_cp_array(func, replaced_str, lineno):
+    global CP_LIST
+
     cpi = func.get_cpi(replaced_str)
     if cpi is None:
         raise PException(f"{replaced_str} doesn't have cpi")
 
-    if cpi.rhs is not None:
-        if replaced_str not in CP_LIST:
-            CP_LIST[replaced_str] = {}
-        if cpi not in CP_LIST[replaced_str]:
-            CP_LIST[replaced_str][cpi.rhs] = []
-        if lineno not in CP_LIST[replaced_str][cpi.rhs]:
-            CP_LIST[replaced_str][cpi.rhs].append(lineno)
+    if cpi.rhs is None:
+        return
+
+    CP_LIST.append((lineno, replaced_str, cpi.rhs))
 
 
 def update_optimization_information_with_assign(func, scope, var_info, expr, lineno, lhs):
@@ -361,7 +360,6 @@ def remove_optimization_information_with_scope(func, scope):
 # Otherwise return True, value
 def next_expr(func, expr, lineno):
     global CURRENT_LINE
-    global CP_LIST
     global CS_LIST
 
     behavior = expr[0]
