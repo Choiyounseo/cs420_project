@@ -640,12 +640,13 @@ def next_line():
 
 def interpret(tree):
     global CURRENT_LINE
+
     # Function index
     func = {}
     for func_info in tree:
         func[func_info[2]] = func_info
 
-    if not "main" in func:
+    if "main" not in func:
         raise PException("Main function doesn't exist")
 
     MAIN_STACK.push(Function(func["main"]))
@@ -689,6 +690,9 @@ def interpret(tree):
                 print(f"History of {cmd[1]}")
                 for history in var.history:
                     print(f"{cmd[1]} = {history[1]} at line {history[0]}")
+
+        if CURRENT_LINE >= len(PLAIN_CODE):
+            break
 
         # TODO : this line is for debug
         print(f"Current stmt: (Line {CURRENT_LINE}) {PLAIN_CODE[CURRENT_LINE]}")
