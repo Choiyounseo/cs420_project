@@ -5,3 +5,8 @@
 # pycharm for mac
 .idea
 __pycache__
+
+# debug
+output.c
+parser.out
+parsetab.py
