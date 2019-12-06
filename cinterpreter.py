@@ -294,6 +294,8 @@ def add_cp_id(func, expr, lineno):
         raise PException(f"Declared variable {expr[1]} doesn't have cpi")
 
     if cpi.rhs is None:
+        if (lineno, expr[1]) in CP_LIST:
+            del CP_LIST[(lineno, expr[1])]
         return
 
     CP_LIST[(lineno, expr[1])] = cpi.rhs
@@ -307,6 +309,8 @@ def add_cp_array(func, replaced_str, lineno):
         raise PException(f"{replaced_str} doesn't have cpi")
 
     if cpi.rhs is None:
+        if (lineno, replaced_str) in CP_LIST:
+            del CP_LIST[(lineno, replaced_str)]
         return
 
     CP_LIST[(lineno, replaced_str)] = cpi.rhs
@@ -332,7 +336,7 @@ def add_cs(expr_type, expr_str, target_lines):
         CS_DICT[expr_str].append((expr_type, set(target_lines)))
 
 
-def update_optimization_information_with_assign(func, scope, var_info, expr, lineno, lhs):
+def update_optimization_information_with_assign(func, expr, lineno, lhs):
     cpi = func.get_cpi(lhs)
 
     # direct assignment
@@ -344,31 +348,14 @@ def update_optimization_information_with_assign(func, scope, var_info, expr, lin
     else:
         cpi.assign(None, lineno)
 
-    # cpi should be deleted if it has just assigned variable as rhs
-    for var_name in func.cpis:
-        if func.cpis[var_name][-1].rhs is lhs:
-            func.cpis[var_name][-1].assign(None, lineno)
-
     for expr_str in func.csis:
         if lhs in func.csis[expr_str][-1].used_vars:
             func.csis[expr_str][-1].lines = [-1]
 
-    if isinstance(scope, SubScope):
-        # assignment in for() is executed with other statements which in the same line
-        if scope.type is ScopeType.FOR:
-            if lineno == scope.line_no[0]:
-                scope.update_idx()
-                next_line()
-        # copy propagation cannot be from inner scope to outer scope
-        if not var_info[1] in scope.assigned_vars:
-            scope.assigned_vars.append(lhs)
 
-
-def remove_optimization_information(func, var_info, lineno):
-    # cpi should be erased if it has just assigned variable as rhs
-    for var_name in func.cpis:
-        if func.cpis[var_name][-1].rhs is var_info[1]:
-            func.cpis[var_name][-1].assign(None, lineno)
+def update_optimization_information_with_increment(func, var_info, lineno):
+    cpi = func.get_cpi(var_info[1])
+    cpi.assign(None, lineno)
 
 
 def remove_optimization_information_with_scope(func, scope):
@@ -544,7 +531,17 @@ def next_line():
         finished, value = next_expr(func, expr, lineno)
         if finished:
             var.assign(value, lineno)
-            update_optimization_information_with_assign(func, scope, var_info, expr, lineno, lhs)
+            update_optimization_information_with_assign(func, expr, lineno, lhs)
+
+            if isinstance(scope, SubScope):
+                # assignment in for() is executed with other statements which in the same line
+                if scope.type is ScopeType.FOR:
+                    if lineno == scope.line_no[0]:
+                        scope.update_idx()
+                        next_line()
+                # copy propagation cannot be from inner scope to outer scope
+                if not var_info[1] in scope.assigned_vars:
+                    scope.assigned_vars.append(lhs)
             scope.idx += 1
 
     elif behavior == "increment":
@@ -558,7 +555,7 @@ def next_line():
         value = var.value
         var.assign(value + 1, lineno)
 
-        remove_optimization_information(func, var_info, lineno)
+        update_optimization_information_with_increment(func, var_info, lineno)
 
         # increment in for() is executed with other statements which in the same line
         if isinstance(scope, SubScope):
