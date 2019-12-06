@@ -1,5 +1,4 @@
 from cyacc import lexer, parser
-from os import listdir, path
 import copy
 import enum
 import sys
@@ -38,7 +37,9 @@ MAIN_STACK = Stack()
 PLAIN_CODE = ""
 PLAIN_CODE_ONE_LINE = ""
 CURRENT_LINE = 0
+# Copy Propagation
 CP_LIST = {}
+# Common Subexpression Elimination
 CS_LIST = {}
 
 
@@ -62,16 +63,20 @@ class VAR:
         self.history.append([lineno, value])
         self.value = value
 
+
+# Copy Propagation Information
 class CPI:
     def __init__(self, lineno):
+        # rhs can be variable or direct number
         self.rhs = None
         self.lineno = lineno
-        # rhs can be variable or direct number
 
     def assign(self, new_rhs, new_lineno):
         self.rhs = new_rhs
         self.lineno = new_lineno
 
+
+# Common Subexpression Elimination Information
 class CSI:
     def __init__(self, used_vars, lineno):
         self.used_vars = used_vars
@@ -202,6 +207,10 @@ class Function:
             self.vars[var_name] = []
         self.vars[var_name].append(var)
 
+        # For optimization
+        self.declare_cpi(var_name, lineno)
+        self.add_csi(var_name)
+
     def get_var(self, var_name):
         if var_name not in self.vars:
             return None
@@ -211,6 +220,10 @@ class Function:
         self.vars[var_name].pop()
         if len(self.vars[var_name]) == 0:
             self.vars.pop(var_name, None)
+
+        # For optimization
+        self.release_cpi(var_name)
+        self.del_csi(var_name)
 
     def declare_cpi(self, var_name, lineno):
         cpi = CPI(lineno)
@@ -230,7 +243,7 @@ class Function:
 
     def access_csi(self, expr_str, used_var, lineno):
         global CS_LIST
-        if not expr_str in self.csis:
+        if expr_str not in self.csis:
             self.csis[expr_str] = [CSI(used_var, lineno)]
         elif self.csis[expr_str][-1].lines[-1] is -1:
             self.csis[expr_str][-1].assign(lineno)
@@ -238,7 +251,7 @@ class Function:
             self.csis[expr_str][-1].add_line(lineno)
             lineset = self.csis[expr_str][-1].lines
             if len(lineset) > 1:
-                if not expr_str in CS_LIST:
+                if expr_str not in CS_LIST:
                     CS_LIST[expr_str] = {}
                 CS_LIST[expr_str][lineset[0]] = lineset
 
@@ -254,14 +267,14 @@ class Function:
         for expr_str in self.csis:
             for arg in self.csis[expr_str][-1].used_vars:
                 if arg == var:
-                    if not expr_str in remove_list:
+                    if expr_str not in remove_list:
                         remove_list.append(expr_str)
-                    break;
+                    break
         for expr_str in remove_list:
             self.release_csi(expr_str)
 
     def get_csi(self, expr_str):
-        if not expr_str in self.csis:
+        if expr_str not in self.csis:
             return None
         return self.csis[expr_str][-1]
 
@@ -269,6 +282,78 @@ class Function:
         self.csis[expr_str].pop()
         if len(self.csis[expr_str]) == 0:
             self.csis.pop(expr_str, None)
+
+
+def add_cp_id(func, expr, lineno):
+    cpi = func.get_cpi(expr[1])
+    if cpi is None:
+        raise PException(f"Declared variable {expr[1]} doesn't have cpi")
+
+    if cpi.rhs is not None:
+        if expr[1] not in CP_LIST:
+            CP_LIST[expr[1]] = {}
+        if cpi not in CP_LIST[expr[1]]:
+            CP_LIST[expr[1]][cpi.rhs] = []
+        if lineno not in CP_LIST[expr[1]][cpi.rhs]:
+            CP_LIST[expr[1]][cpi.rhs].append(lineno)
+
+
+def add_cp_array(func, replaced_str, lineno):
+    cpi = func.get_cpi(replaced_str)
+    if cpi is None:
+        raise PException(f"{replaced_str} doesn't have cpi")
+
+    if cpi.rhs is not None:
+        if replaced_str not in CP_LIST:
+            CP_LIST[replaced_str] = {}
+        if cpi not in CP_LIST[replaced_str]:
+            CP_LIST[replaced_str][cpi.rhs] = []
+        if lineno not in CP_LIST[replaced_str][cpi.rhs]:
+            CP_LIST[replaced_str][cpi.rhs].append(lineno)
+
+
+def update_optimization_information_with_assign(func, scope, var_info, expr, lineno, lhs):
+    cpi = func.get_cpi(lhs)
+
+    # direct assignment
+    if expr[0] is 'number':
+        cpi.assign(expr[1], lineno)
+    elif expr[0] is 'id':
+        cpi.assign(expr[1], lineno)
+    # cpi should be erased if not direct assignment
+    else:
+        cpi.assign(None, lineno)
+
+    # cpi should be deleted if it has just assigned variable as rhs
+    for var_name in func.cpis:
+        if func.cpis[var_name][-1].rhs is lhs:
+            func.cpis[var_name][-1].assign(None, lineno)
+
+    for expr_str in func.csis:
+        if lhs in func.csis[expr_str][-1].used_vars:
+            func.csis[expr_str][-1].lines = [-1]
+
+    if isinstance(scope, SubScope):
+        # assignment in for() is executed with other statements which in the same line
+        if scope.type is ScopeType.FOR:
+            if lineno == scope.line_no[0]:
+                scope.update_idx()
+                next_line()
+        # copy propagation cannot be from inner scope to outer scope
+        if not var_info[1] in scope.assigned_vars:
+            scope.assigned_vars.append(lhs)
+
+
+def remove_optimization_information(func, var_info, lineno):
+    # cpi should be erased if it has just assigned variable as rhs
+    for var_name in func.cpis:
+        if func.cpis[var_name][-1].rhs is var_info[1]:
+            func.cpis[var_name][-1].assign(None, lineno)
+
+
+def remove_optimization_information_with_scope(func, scope):
+    for var in scope.assigned_vars:
+        func.cpis[var][-1].assign(None, CURRENT_LINE)
 
 
 # return finished, value.
@@ -285,19 +370,9 @@ def next_expr(func, expr, lineno):
     elif behavior == 'id':
         var = func.get_var(expr[1])
         if var is None:
-            raise PException(f"Varaible {expr[1]} not found")
+            raise PException(f"Variable {expr[1]} not found")
 
-        cpi = func.get_cpi(expr[1])
-        if cpi is None:
-            raise PException(f"Declared variable {expr[1]} doesn't have cpi")
-
-        if cpi.rhs is not None:
-            if expr[1] not in CP_LIST:
-                CP_LIST[expr[1]] = {}
-            if cpi not in CP_LIST[expr[1]]:
-                CP_LIST[expr[1]][cpi.rhs] = []
-            if lineno not in CP_LIST[expr[1]][cpi.rhs]:
-                CP_LIST[expr[1]][cpi.rhs].append(lineno)
+        add_cp_id(func, expr, lineno)
 
         return True, var.value
     elif behavior == 'functcall':
@@ -327,22 +402,13 @@ def next_expr(func, expr, lineno):
         finished, value = next_expr(func, expr[2], lineno)
         if not finished:
             return None, False
+
         replaced_str = expr[1] + '[' + str(value) + ']'
         var = func.get_var(replaced_str)
         if var is None:
             raise PException(f"Array has {expr[1][2]}th member")
 
-        cpi = func.get_cpi(replaced_str)
-        if cpi is None:
-            raise PException(f"{replaced_str} doesn't have cpi")
-
-        if cpi.rhs is not None:
-            if replaced_str not in CP_LIST:
-                CP_LIST[replaced_str] = {}
-            if cpi not in CP_LIST[replaced_str]:
-                CP_LIST[replaced_str][cpi.rhs] = []
-            if lineno not in CP_LIST[replaced_str][cpi.rhs]:
-                CP_LIST[replaced_str][cpi.rhs].append(lineno)
+        add_cp_array(func, replaced_str, lineno)
 
         return True, var.value
     else:
@@ -351,6 +417,7 @@ def next_expr(func, expr, lineno):
         finished, value1 = next_expr(func, expr[1], lineno)
         if not finished:
             return False, None
+
         finished, value2 = next_expr(func, expr[2], lineno)
         if not finished:
             return False, None
@@ -373,7 +440,6 @@ def next_expr(func, expr, lineno):
 
 def next_line():
     global CURRENT_LINE
-    global CP_LIST
 
     func = MAIN_STACK.top()
     if func is None:
@@ -385,7 +451,8 @@ def next_line():
     stmt = scope.stmts[scope.idx]
 
     stmt_lineno = stmt[-1]
-    if isinstance(stmt_lineno, list): stmt_lineno = stmt_lineno[0]
+    if isinstance(stmt_lineno, list):
+        stmt_lineno = stmt_lineno[0]
     if CURRENT_LINE < stmt_lineno:
         return
 
@@ -413,17 +480,17 @@ def next_line():
                 index_value = 1
             else:
                 raise PException(f"wrong declaration")
-            for i in range(0,index_value):
+
+            for i in range(0, index_value):
                 if var[0] is 'array':
                     var_name = var[1] + '[' + str(i) + ']'
                 else:
                     var_name = var[1]
+
                 if isinstance(scope, SubScope):
                     if var_name not in scope.declared_vars:
                         scope.declared_vars.append(var_name)
                         func.declare_var(var_type, var_name, lineno)
-                        func.declare_cpi(var_name, lineno)
-                        func.add_csi(var_name)
                     else:
                         if scope.type is ScopeType.FOR:
                             scope.update_idx()
@@ -432,7 +499,6 @@ def next_line():
                             raise PException(f"Double declaration in if-statement!")
                 else:
                     func.declare_var(var_type, var_name, lineno)
-                    func.declare_cpi(var_name, lineno)
         # Declaration in for-statement invoked once at first.
         # CURRENT_LINE = lineno + skip
         scope.idx += 1
@@ -450,44 +516,17 @@ def next_line():
             if not finished:
                 raise PException(f"array cannot be resolved")
             lhs = var_info[1] + '[' + str(index_value) + ']'
-        var = func.get_var(lhs)
-        cpi = func.get_cpi(lhs)
+        else:
+            raise PException(f"assign must be for id or array")
 
+        var = func.get_var(lhs)
         if var is None:
             raise PException(f"Variable {lhs} not found")
-        if cpi is None:
-            raise PException(f"Declared variable {lhs} doesn't have cpi")
+
         finished, value = next_expr(func, expr, lineno)
         if finished:
             var.assign(value, lineno)
-            # Update copy propagation information
-
-            # direct assignment
-            if expr[0] is 'number':
-                cpi.assign(expr[1], lineno)
-            elif expr[0] is 'id':
-                cpi.assign(expr[1], lineno)
-            # cpi should be erased if not direct assignment
-            else:
-                cpi.assign(None, lineno)
-            # cpi should be deleted if it has just assigned variable as rhs
-            for var_name in func.cpis:
-                if func.cpis[var_name][-1].rhs is lhs:
-                    func.cpis[var_name][-1].assign(None, lineno)
-
-            for expr_str in func.csis:
-                if lhs in func.csis[expr_str][-1].used_vars:
-                    func.csis[expr_str][-1].lines = [-1]
-
-            if isinstance(scope, SubScope):
-                # assignment in for() is executed with other statements which in the same line
-                if scope.type is ScopeType.FOR:
-                    if lineno == scope.line_no[0]:
-                        scope.update_idx()
-                        next_line()
-                # copy propagation cannot be from inner scope to outer scope
-                if not var_info[1] in scope.assigned_vars:
-                    scope.assigned_vars.append(lhs)
+            update_optimization_information_with_assign(func, scope, var_info, expr, lineno, lhs)
             scope.idx += 1
 
     elif behavior == "increment":
@@ -496,18 +535,12 @@ def next_line():
         '''
         var_info, lineno = stmt[1:]
         var = func.get_var(var_info[1])
-        cpi = func.get_cpi(var_info[1])
         if var is None:
             raise PException(f"Varaible {var_info[1]} not found")
-        if cpi is None:
-            raise PException(f"Declared variable {var_info[1]} doesn't have cpi")
         value = var.value
         var.assign(value + 1, lineno)
 
-        # cpi should be erased if it has just assigned variable as rhs
-        for var_name in func.cpis:
-            if func.cpis[var_name][-1].rhs is var_info[1]:
-                func.cpis[var_name][-1].assign(None, lineno)
+        remove_optimization_information(func, var_info, lineno)
 
         # increment in for() is executed with other statements which in the same line
         if isinstance(scope, SubScope):
@@ -599,14 +632,6 @@ def next_line():
         else:
             raise PException(f"condition({condition}) is invalid", stmt[4])
 
-    '''for var_name in CP_LIST:
-        for rhs in CP_LIST[var_name]:
-            print(f"{var_name} = {rhs} need to be propagated to the lines {CP_LIST[var_name][rhs]}")'''
-
-    '''for expr_str in CS_LIST:
-        for first_line in CS_LIST[expr_str]:
-            print(f"{expr_str} is common subexpression to be eliminated for the lines {CS_LIST[expr_str][first_line]}")'''
-
     if isinstance(scope, SubScope):
         scope.update_idx()
 
@@ -619,12 +644,9 @@ def next_line():
         scope = func.stack.top()
         if scope.is_done():
             if isinstance(scope, SubScope):
-                for var in scope.assigned_vars:
-                    func.cpis[var][-1].assign(None, CURRENT_LINE)
+                remove_optimization_information_with_scope(func,scope)
                 for var in scope.declared_vars:
                     func.release_var(var)
-                    func.release_cpi(var)
-                    func.del_csi(var)
             func.stack.pop()
             next_scope = func.stack.top()
             # if current scope is done, next scope must increase statement index
