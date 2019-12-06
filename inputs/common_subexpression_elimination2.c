@@ -15,6 +15,6 @@ int main(void) {
         b = b * c + e;
         b = b * c + e;
         b = a * e;
-        b = b - c + e;
+        b = b + c + e;
     }
 }

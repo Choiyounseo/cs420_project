@@ -7,4 +7,5 @@ int main(void) {
         int a;
     }
     c = a;
+    b = a;
 }
