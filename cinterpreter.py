@@ -2,6 +2,7 @@ from cyacc import lexer, parser
 from os import listdir, path
 import copy
 import enum
+import sys
 
 
 class PException(Exception):
@@ -35,6 +36,7 @@ class Stack:
 
 MAIN_STACK = Stack()
 PLAIN_CODE = ""
+PLAIN_CODE_ONE_LINE = ""
 CURRENT_LINE = 0
 CP_LIST = {}
 CS_LIST = {}
@@ -43,6 +45,7 @@ CS_LIST = {}
 class Return:
     def __init__(self, value):
         self.value = value
+
 
 class VAR:
     def __init__(self, var_type, lineno):
@@ -693,19 +696,31 @@ def interpret(tree):
 
 
 def process():
-    global PLAIN_CODE
-    f = open("inputs/common_subexpression_elimination1.c", "r")
-    PLAIN_CODE = f.readlines()
-    code = "".join(PLAIN_CODE)
-    PLAIN_CODE = [""] + PLAIN_CODE # PLAIN_CODE[1] indicates Line 1
-    f.close()
-
-    tree = parser.parse(code, lexer=lexer)
+    tree = parser.parse(PLAIN_CODE_ONE_LINE, lexer=lexer)
     interpret(tree)
 
 
+def load_input_file(filename):
+    f = open(f"inputs/{filename}", "r")
+
+    lines = f.readlines()
+    # lines[1] indicates Line 1
+    lines.insert(0, "")
+    code = "".join(lines)
+
+    f.close()
+
+    return lines, code
+
+
 if __name__ == "__main__":
+    if len(sys.argv) == 2:
+        input_filename = sys.argv[1]
+    else:
+        input_filename = "common_subexpression_elimination1.c"
+
     try:
+        PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
         process()
     except PException as e:
         print("Compile Error: ", e)
