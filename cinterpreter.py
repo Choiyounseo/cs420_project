@@ -452,13 +452,12 @@ def next_line():
 
     scope = func.stack.top()
 
-    CURRENT_LINE += 1
     stmt = scope.stmts[scope.idx]
 
     stmt_lineno = stmt[-1]
     if isinstance(stmt_lineno, list):
         stmt_lineno = stmt_lineno[0]
-    if CURRENT_LINE < stmt_lineno:
+    if CURRENT_LINE + 1 < stmt_lineno:
         return
 
     if isinstance(scope, SubScope):
@@ -650,6 +649,9 @@ def next_line():
 
     if isinstance(scope, SubScope):
         scope.update_idx()
+        # change current line to first line of for-loop if current line is last line of for-loop
+        if scope.type == ScopeType.FOR and CURRENT_LINE == scope.line_no[1]:
+            CURRENT_LINE = scope.line_no[0] - 1
 
     while not MAIN_STACK.isEmpty():
         func = MAIN_STACK.top()
@@ -692,6 +694,8 @@ def interpret_initialization(tree):
 
 
 def interpret(tree):
+    global CURRENT_LINE
+
     interpret_initialization(tree)
     while not MAIN_STACK.isEmpty():
         cmd = ""
@@ -712,6 +716,7 @@ def interpret(tree):
             cnt = int(cmd[1])
             while cnt > 0:
                 next_line()
+                CURRENT_LINE += 1
                 cnt -= 1
 
         elif cmd[0] == "print":
@@ -763,6 +768,7 @@ def process_without_input():
 
     while not MAIN_STACK.isEmpty():
         next_line()
+        CURRENT_LINE += 1
 
 
 def load_input_file(filename):
