@@ -42,7 +42,7 @@ CURRENT_LINE = 0
 # key : (line number, before variable), value : next variable
 CP_LIST = {}
 # Common Subexpression Elimination
-# key : target expression, value : target line numbers of sets of list
+# key : target expression, value : (variable type, target line numbers of sets) of list
 CS_DICT = {}
 
 
@@ -251,7 +251,7 @@ class Function:
             self.csis[expr_str][-1].assign(lineno)
         else:
             self.csis[expr_str][-1].add_line(lineno)
-            add_cs(expr_str, self.csis[expr_str][-1].lines)
+            add_cs(self.get_var(used_var[0]).type, expr_str, self.csis[expr_str][-1].lines)
 
     def add_csi(self, var):
         for expr_str in self.csis:
@@ -308,7 +308,7 @@ def add_cp_array(func, replaced_str, lineno):
     CP_LIST[(lineno, replaced_str)] = cpi.rhs
 
 
-def add_cs(expr_str, target_lines):
+def add_cs(expr_type, expr_str, target_lines):
     global CS_DICT
 
     if len(target_lines) <= 1:
@@ -318,14 +318,14 @@ def add_cs(expr_str, target_lines):
         CS_DICT[expr_str] = []
 
     is_overriding = False
-    for (index, lines) in enumerate(CS_DICT[expr_str]):
+    for (index, (expr_type, lines)) in enumerate(CS_DICT[expr_str]):
         if lines.issubset(target_lines):
-            CS_DICT[expr_str][index] = set(target_lines)
+            CS_DICT[expr_str][index] = (expr_type, set(target_lines))
             is_overriding = True
             break
 
     if not is_overriding:
-        CS_DICT[expr_str].append(set(target_lines))
+        CS_DICT[expr_str].append((expr_type, set(target_lines)))
 
 
 def update_optimization_information_with_assign(func, scope, var_info, expr, lineno, lhs):
@@ -753,7 +753,7 @@ def load_input_file(filename):
     return lines, code
 
 
-def get_target_string(target_line, target_variables):
+def get_optimized_cp_string(target_line, target_variables):
     # get right expression
     assign_index = target_line.find('=')
     right_expression = target_line[assign_index + 1:]
@@ -775,23 +775,93 @@ def get_target_string(target_line, target_variables):
     return target_string
 
 
-def print_optimization_code():
+def get_indentation_string(target_string):
+    regex = re.compile(r'([a-zA-Z_][0-9a-zA-Z_]*)')
+    regex_search = regex.search(target_string)
+    return target_string[:regex_search.start()]
+
+
+def get_cs_delta_line(lines, line):
+    for line_number in lines:
+        if line >= line_number:
+            line += 2
+    return line
+
+
+def get_optimized_cs_string(target_line, target_expression, cs_variable):
+    # get right expression
+    assign_index = target_line.find('=')
+    right_expression = target_line[assign_index + 1:]
+    right_expression = right_expression.replace(" ", "")
+    target_expression = target_expression.replace("*", "\*")
+    target_expression = target_expression.replace("+", "\+")
+
+    # find target variables
+    if '[' in target_expression:
+        # TODO : array
+        return target_line
+
+    delta_index = 0
+    new_expression = str(right_expression)
+    for obj in re.finditer(target_expression, right_expression):
+        start_index, end_index = (obj.span()[0] + delta_index, obj.span()[1] + delta_index)
+        new_expression = f"{new_expression[:start_index]}{cs_variable}{new_expression[end_index:]}"
+        delta_index += len(cs_variable) - (end_index - start_index)
+    return f"{target_line[:assign_index + 1]} {new_expression}"
+
+
+def print_cp_code():
     new_code = list(PLAIN_CODE)
     for (key, next_variable) in CP_LIST.items():
         line_number, before_variable = key
         target_line = str(new_code[line_number])
 
         # find target string
-        target_string = get_target_string(target_line, before_variable)
+        target_string = get_optimized_cp_string(target_line, before_variable)
 
         # replace
         delta_index = 0
         for start_index, end_index in target_string:
-            target_line = target_line[:start_index + delta_index] + str(next_variable) + target_line[
-                                                                                         end_index + delta_index:]
+            target_line = f"{target_line[:start_index + delta_index]}{str(next_variable)}{target_line[end_index + delta_index:]}"
             delta_index += len(str(next_variable)) - (end_index - start_index)
 
         new_code[line_number] = target_line
+
+    # write output code
+    f = open("output.c", "w")
+    f.writelines(new_code)
+    f.close()
+
+
+def print_cs_code():
+    target = sorted(CS_DICT.items(), key=lambda element: len(element[0]), reverse=True)
+    new_code = list(PLAIN_CODE)
+    inserted_line_numbers = []
+    variable_index = 0
+    for (index, (target_expression, target_line_info)) in enumerate(target):
+        for (target_type, target_line_numbers) in target_line_info:
+            target_line_numbers = sorted(list(target_line_numbers))
+            if len(target_line_numbers) < 2:
+                continue
+
+            # insert variable
+            target_line_number = get_cs_delta_line(inserted_line_numbers, target_line_numbers[0])
+            indentation = get_indentation_string(new_code[target_line_number])
+            variable_name = f"__optimized_variable{variable_index}"
+
+            declare_string = f"{indentation}{target_type} {variable_name};\n"
+            assign_string = f"{indentation}{variable_name} = {target_expression};\n"
+
+            new_code.insert(target_line_number, assign_string)
+            new_code.insert(target_line_number, declare_string)
+            inserted_line_numbers.append(target_line_number)
+
+            # replace variable
+            for line_number in target_line_numbers:
+                target_line_number = get_cs_delta_line(inserted_line_numbers, line_number)
+                new_code[target_line_number] = get_optimized_cs_string(str(new_code[target_line_number]), target_expression, variable_name)
+
+            variable_index += 1
 
     # write output code
     f = open("output.c", "w")
@@ -808,6 +878,6 @@ if __name__ == "__main__":
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
         process()
-        print_optimization_code()
+        print_cs_code()
     except PException as e:
         print("Compile Error: ", e)
