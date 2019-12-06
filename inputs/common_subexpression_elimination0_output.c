@@ -1,10 +1,10 @@
-void avg(int b, int c) {
-    int a = b * c;
-}
-
 int main(void) {
     int a, b;
     int c, d, e, g;
+    b = 1;
+    c = 2;
+    e = 3;
+    g = 4;
     int tmp;
     tmp = b * c;
     a = tmp + g;
