@@ -38,10 +38,11 @@ PLAIN_CODE = ""
 PLAIN_CODE_ONE_LINE = ""
 CURRENT_LINE = 0
 # Copy Propagation
-# (line_no, before_variable, next_variable) of list
+# (line number, before variable, next variable) of list
 CP_LIST = []
 # Common Subexpression Elimination
-CS_LIST = {}
+# key : target expression, value : target line numbers of sets of list
+CS_DICT = {}
 
 
 class Return:
@@ -243,18 +244,13 @@ class Function:
             self.cpis.pop(var_name, None)
 
     def access_csi(self, expr_str, used_var, lineno):
-        global CS_LIST
         if expr_str not in self.csis:
             self.csis[expr_str] = [CSI(used_var, lineno)]
         elif self.csis[expr_str][-1].lines[-1] is -1:
             self.csis[expr_str][-1].assign(lineno)
         else:
             self.csis[expr_str][-1].add_line(lineno)
-            lineset = self.csis[expr_str][-1].lines
-            if len(lineset) > 1:
-                if expr_str not in CS_LIST:
-                    CS_LIST[expr_str] = {}
-                CS_LIST[expr_str][lineset[0]] = lineset
+            add_cs(expr_str, self.csis[expr_str][-1].lines)
 
     def add_csi(self, var):
         for expr_str in self.csis:
@@ -311,6 +307,26 @@ def add_cp_array(func, replaced_str, lineno):
     CP_LIST.append((lineno, replaced_str, cpi.rhs))
 
 
+def add_cs(expr_str, target_lines):
+    global CS_DICT
+
+    if len(target_lines) <= 1:
+        return
+
+    if expr_str not in CS_DICT:
+        CS_DICT[expr_str] = []
+
+    is_overriding = False
+    for (index, lines) in enumerate(CS_DICT[expr_str]):
+        if lines.issubset(target_lines):
+            CS_DICT[expr_str][index] = set(target_lines)
+            is_overriding = True
+            break
+
+    if not is_overriding:
+        CS_DICT[expr_str].append(set(target_lines))
+
+
 def update_optimization_information_with_assign(func, scope, var_info, expr, lineno, lhs):
     cpi = func.get_cpi(lhs)
 
@@ -360,7 +376,6 @@ def remove_optimization_information_with_scope(func, scope):
 # Otherwise return True, value
 def next_expr(func, expr, lineno):
     global CURRENT_LINE
-    global CS_LIST
 
     behavior = expr[0]
     if behavior == 'number':
