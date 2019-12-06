@@ -235,7 +235,6 @@ class Function:
             self.csis[expr_str][-1].add_line(lineno)
             lineset = self.csis[expr_str][-1].lines
             if len(lineset) > 1:
-                print(f"expr_str is {expr_str}")
                 if not expr_str in CS_LIST:
                     CS_LIST[expr_str] = {}
                 CS_LIST[expr_str][lineset[0]] = lineset
@@ -688,6 +687,7 @@ def interpret(tree):
                 for history in var.history:
                     print(f"{cmd[1]} = {history[1]} at line {history[0]}")
 
+        # TODO : this line is for debug
         print(f"Current stmt: (Line {CURRENT_LINE}) {PLAIN_CODE[CURRENT_LINE]}")
     print("End of Program")
 
@@ -701,7 +701,6 @@ def process():
     f.close()
 
     tree = parser.parse(code, lexer=lexer)
-#    print(tree)
     interpret(tree)
 
 
