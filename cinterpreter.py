@@ -2,6 +2,7 @@ from cyacc import lexer, parser
 import copy
 import enum
 import sys
+import re
 
 
 class PException(Exception):
@@ -38,8 +39,8 @@ PLAIN_CODE = ""
 PLAIN_CODE_ONE_LINE = ""
 CURRENT_LINE = 0
 # Copy Propagation
-# (line number, before variable, next variable) of list
-CP_LIST = []
+# key : (line number, before variable), value : next variable
+CP_LIST = {}
 # Common Subexpression Elimination
 # key : target expression, value : target line numbers of sets of list
 CS_DICT = {}
@@ -102,7 +103,7 @@ class Scope:
         self.stmts = copy.deepcopy(stmts)
         self.type = type
         self.idx = 0
-        self.dest = None # Where the return value had to be located
+        self.dest = None  # Where the return value had to be located
 
     def is_done(self):
         return self.idx == len(self.stmts)
@@ -291,7 +292,7 @@ def add_cp_id(func, expr, lineno):
     if cpi.rhs is None:
         return
 
-    CP_LIST.append((lineno, expr[1], cpi.rhs))
+    CP_LIST[(lineno, expr[1])] = cpi.rhs
 
 
 def add_cp_array(func, replaced_str, lineno):
@@ -304,7 +305,7 @@ def add_cp_array(func, replaced_str, lineno):
     if cpi.rhs is None:
         return
 
-    CP_LIST.append((lineno, replaced_str, cpi.rhs))
+    CP_LIST[(lineno, replaced_str)] = cpi.rhs
 
 
 def add_cs(expr_str, target_lines):
@@ -571,7 +572,7 @@ def next_line():
                 stmts,
                 [3, 5]]
         '''
-        func.stack.push(SubScope(stmt[1:-1], stmt[-1],ScopeType.FOR))
+        func.stack.push(SubScope(stmt[1:-1], stmt[-1], ScopeType.FOR))
         next_line()
     elif behavior == "if":
         '''
@@ -602,7 +603,7 @@ def next_line():
                     finished, index_var = next_expr(func, arg[2], lineno)
                     if not finished:
                         PException(f"array index cannot be resolved")
-                    var = func.get_var(arg[1]+'['+str(index_var)+']')
+                    var = func.get_var(arg[1] + '[' + str(index_var) + ']')
                     if var is None:
                         raise PException(f"Varaible {args_info[1]} not found")
                     args.append(var.value)
@@ -657,7 +658,7 @@ def next_line():
         scope = func.stack.top()
         if scope.is_done():
             if isinstance(scope, SubScope):
-                remove_optimization_information_with_scope(func,scope)
+                remove_optimization_information_with_scope(func, scope)
                 for var in scope.declared_vars:
                     func.release_var(var)
             func.stack.pop()
@@ -752,6 +753,52 @@ def load_input_file(filename):
     return lines, code
 
 
+def get_target_string(target_line, target_variables):
+    # get right expression
+    assign_index = target_line.find('=')
+    right_expression = target_line[assign_index + 1:]
+
+    # find target variables
+    if '[' in target_variables:
+        new_target = target_variables.replace('[', '\[')
+        new_target = new_target.replace(']', '\]')
+        regex_iter = re.finditer(new_target, right_expression)
+    else:
+        regex = re.compile(r'([a-zA-Z_][0-9a-zA-Z_]*)')
+        regex_iter = regex.finditer(right_expression)
+
+    target_string = []
+    for obj in regex_iter:
+        if obj.group() == target_variables:
+            start_index, end_index = obj.span()
+            target_string.append((start_index + assign_index + 1, end_index + assign_index + 1))
+    return target_string
+
+
+def print_optimization_code():
+    new_code = list(PLAIN_CODE)
+    for (key, next_variable) in CP_LIST.items():
+        line_number, before_variable = key
+        target_line = str(new_code[line_number])
+
+        # find target string
+        target_string = get_target_string(target_line, before_variable)
+
+        # replace
+        delta_index = 0
+        for start_index, end_index in target_string:
+            target_line = target_line[:start_index + delta_index] + str(next_variable) + target_line[
+                                                                                         end_index + delta_index:]
+            delta_index += len(str(next_variable)) - (end_index - start_index)
+
+        new_code[line_number] = target_line
+
+    # write output code
+    f = open("output.c", "w")
+    f.writelines(new_code)
+    f.close()
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 2:
         input_filename = sys.argv[1]
@@ -761,5 +808,6 @@ if __name__ == "__main__":
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
         process()
+        print_optimization_code()
     except PException as e:
         print("Compile Error: ", e)
