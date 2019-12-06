@@ -1,7 +1,12 @@
-# Default ignored files
+    # Default ignored files
 *.xml
 *.iml
 
 # pycharm for mac
 .idea
+.gitignore
 __pycache__
+parser.out
+parsetab.py
+venv/
+
