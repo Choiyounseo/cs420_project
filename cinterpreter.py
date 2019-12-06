@@ -40,7 +40,7 @@ PLAIN_CODE_ONE_LINE = ""
 CURRENT_LINE = 0
 # Copy Propagation
 # key : (line number, before variable), value : next variable
-CP_LIST = {}
+CP_DICT = {}
 # Common Subexpression Elimination
 # key : target expression, value : (variable type, target line numbers of sets) of list
 CS_DICT = {}
@@ -287,33 +287,33 @@ class Function:
 
 
 def add_cp_id(func, expr, lineno):
-    global CP_LIST
+    global CP_DICT
 
     cpi = func.get_cpi(expr[1])
     if cpi is None:
         raise PException(f"Declared variable {expr[1]} doesn't have cpi")
 
     if cpi.rhs is None:
-        if (lineno, expr[1]) in CP_LIST:
-            del CP_LIST[(lineno, expr[1])]
+        if (lineno, expr[1]) in CP_DICT:
+            del CP_DICT[(lineno, expr[1])]
         return
 
-    CP_LIST[(lineno, expr[1])] = cpi.rhs
+    CP_DICT[(lineno, expr[1])] = cpi.rhs
 
 
 def add_cp_array(func, replaced_str, lineno):
-    global CP_LIST
+    global CP_DICT
 
     cpi = func.get_cpi(replaced_str)
     if cpi is None:
         raise PException(f"{replaced_str} doesn't have cpi")
 
     if cpi.rhs is None:
-        if (lineno, replaced_str) in CP_LIST:
-            del CP_LIST[(lineno, replaced_str)]
+        if (lineno, replaced_str) in CP_DICT:
+            del CP_DICT[(lineno, replaced_str)]
         return
 
-    CP_LIST[(lineno, replaced_str)] = cpi.rhs
+    CP_DICT[(lineno, replaced_str)] = cpi.rhs
 
 
 def add_cs(expr_type, expr_str, target_lines):
@@ -748,13 +748,13 @@ def process():
 def process_without_input():
     global MAIN_STACK
     global CURRENT_LINE
-    global CP_LIST
+    global CP_DICT
     global CS_DICT
 
     # initialize
     MAIN_STACK = Stack()
     CURRENT_LINE = 0
-    CP_LIST = {}
+    CP_DICT = {}
     CS_DICT = {}
 
     # process whole lines
@@ -836,7 +836,7 @@ def get_optimized_cs_string(target_line, target_expression, cs_variable):
 
 def get_cp_optimized_code():
     new_code = list(PLAIN_CODE)
-    for (key, next_variable) in CP_LIST.items():
+    for (key, next_variable) in CP_DICT.items():
         line_number, before_variable = key
         target_line = str(new_code[line_number])
 
