@@ -290,10 +290,15 @@ def p_error(p):
     return tok
     # exit()
 
-clexer = CLexer()
-lexer = clexer.build()
-tokens = clexer.tokens
-parser = yacc.yacc()
+def get_parser_tree(code):
+    global parser
+    clexer = CLexer()
+    lexer = clexer.build()
+    tokens = clexer.tokens
+    parser = yacc.yacc()
+    return parser.parse(code, lexer=lexer)
+
+parser = None
 
 if __name__ == '__main__':
     f = open("inputs/input0.c")

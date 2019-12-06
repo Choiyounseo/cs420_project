@@ -1,4 +1,4 @@
-from cyacc import lexer, parser
+from cyacc import get_parser_tree
 import copy
 import enum
 import sys
@@ -44,6 +44,7 @@ CP_LIST = {}
 # Common Subexpression Elimination
 # key : target expression, value : (variable type, target line numbers of sets) of list
 CS_DICT = {}
+IS_IN_OPTIMIZATION = False
 
 
 class Return:
@@ -251,11 +252,14 @@ class Function:
             self.csis[expr_str][-1].assign(lineno)
         else:
             self.csis[expr_str][-1].add_line(lineno)
-            add_cs(self.get_var(used_var[0]).type, expr_str, self.csis[expr_str][-1].lines)
+            if len(used_var) > 0:
+                var = self.get_var(used_var[0])
+                if var is not None:
+                    add_cs(var.type, expr_str, self.csis[expr_str][-1].lines)
 
     def add_csi(self, var):
         for expr_str in self.csis:
-            for arg in self.csis[expr_str][-1].used_var:
+            for arg in self.csis[expr_str][-1].used_vars:
                 if arg is var:
                     csi = CSI(self.csis[expr_str][-1].used_vars, -1)
                     self.csis[expr_str].append(csi)
@@ -394,7 +398,7 @@ def next_expr(func, expr, lineno):
         func.access_csi(expr_str, used_vars, lineno)
 
         func.dest = []
-        # TODO: Push to the stack for functcall
+        # TODO: push to the stack for functcall
         expr = func.dest
         return None, False
     elif behavior == 'casting':
@@ -610,7 +614,8 @@ def next_line():
                 elif arg[0] == 'number':
                     args.append(arg[1])
 
-            print(print_format % tuple(args))
+            if not IS_IN_OPTIMIZATION:
+                print(print_format % tuple(args))
             scope.idx += 1
 
     elif behavior == "return":
@@ -674,7 +679,7 @@ def next_line():
         break
 
 
-def interpret(tree):
+def interpret_initialization(tree):
     global CURRENT_LINE
 
     # Function index
@@ -688,6 +693,9 @@ def interpret(tree):
     MAIN_STACK.push(Function(func["main"]))
     CURRENT_LINE = func["main"][-1][0]
 
+
+def interpret(tree):
+    interpret_initialization(tree)
     while not MAIN_STACK.isEmpty():
         cmd = ""
         while True:
@@ -736,8 +744,28 @@ def interpret(tree):
 
 
 def process():
-    tree = parser.parse(PLAIN_CODE_ONE_LINE, lexer=lexer)
+    tree = get_parser_tree(PLAIN_CODE_ONE_LINE)
     interpret(tree)
+
+
+def process_without_input():
+    global MAIN_STACK
+    global CURRENT_LINE
+    global CP_LIST
+    global CS_DICT
+
+    # initialize
+    MAIN_STACK = Stack()
+    CURRENT_LINE = 0
+    CP_LIST = {}
+    CS_DICT = {}
+
+    # process whole lines
+    tree = get_parser_tree(PLAIN_CODE_ONE_LINE)
+    interpret_initialization(tree)
+
+    while not MAIN_STACK.isEmpty():
+        next_line()
 
 
 def load_input_file(filename):
@@ -746,11 +774,10 @@ def load_input_file(filename):
     lines = f.readlines()
     # lines[1] indicates Line 1
     lines.insert(0, "")
-    code = "".join(lines)
 
     f.close()
 
-    return lines, code
+    return lines, "".join(lines)
 
 
 def get_optimized_cp_string(target_line, target_variables):
@@ -810,7 +837,7 @@ def get_optimized_cs_string(target_line, target_expression, cs_variable):
     return f"{target_line[:assign_index + 1]} {new_expression}"
 
 
-def print_cp_code():
+def get_cp_optimized_code():
     new_code = list(PLAIN_CODE)
     for (key, next_variable) in CP_LIST.items():
         line_number, before_variable = key
@@ -827,13 +854,10 @@ def print_cp_code():
 
         new_code[line_number] = target_line
 
-    # write output code
-    f = open("output.c", "w")
-    f.writelines(new_code)
-    f.close()
+    return new_code, "".join(new_code)
 
 
-def print_cs_code():
+def get_cs_optimized_code():
     target = sorted(CS_DICT.items(), key=lambda element: len(element[0]), reverse=True)
     new_code = list(PLAIN_CODE)
     inserted_line_numbers = []
@@ -863,9 +887,22 @@ def print_cs_code():
 
             variable_index += 1
 
-    # write output code
+    return new_code, "".join(new_code)
+
+
+def print_optimized_code():
+    global PLAIN_CODE
+    global PLAIN_CODE_ONE_LINE
+    global IS_IN_OPTIMIZATION
+
+    IS_IN_OPTIMIZATION = True
+    PLAIN_CODE, PLAIN_CODE_ONE_LINE = get_cp_optimized_code()
+    process_without_input()
+    PLAIN_CODE,PLAIN_CODE_ONE_LINE = get_cs_optimized_code()
+
+    # write optimized code
     f = open("output.c", "w")
-    f.writelines(new_code)
+    f.writelines(PLAIN_CODE)
     f.close()
 
 
@@ -878,6 +915,7 @@ if __name__ == "__main__":
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
         process()
-        print_cs_code()
     except PException as e:
         print("Compile Error: ", e)
+
+    print_optimized_code()
