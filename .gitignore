@@ -6,7 +6,7 @@
 .idea
 .gitignore
 __pycache__
+output.c
 parser.out
 parsetab.py
 venv/
-
