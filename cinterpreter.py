@@ -411,7 +411,7 @@ def next_expr(func, expr, lineno):
             return True, float(value)
         raise PException(f"Invalid casting {expr[1]}")
     elif behavior == 'array':
-        used_vars, expr_str = expr[3:]
+        used_vars, expr_str = expr[3:5]
         func.access_csi(expr_str, used_vars, lineno)
 
         finished, value = next_expr(func, expr[2], lineno)
