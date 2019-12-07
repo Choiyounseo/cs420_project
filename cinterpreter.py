@@ -427,7 +427,7 @@ def next_expr(func, expr, lineno):
 
         return True, var.value
     else:
-        used_vars, expr_str = expr[3:]
+        used_vars, expr_str = expr[3:5]
         func.access_csi(expr_str, used_vars, lineno)
         finished, value1 = next_expr(func, expr[1], lineno)
         if not finished:
@@ -967,7 +967,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         input_filename = sys.argv[1]
     else:
-        input_filename = "function_call2.c"
+        input_filename = "function_call3.c"
 
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)

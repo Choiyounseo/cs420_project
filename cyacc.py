@@ -125,8 +125,8 @@ def p_functcall(p):
     for arg in p[3]:
         if p[3].index(arg) is not 0:
             func_str += ','
-        func_str += arg[-1]
-        func_arg_list += arg[-2]
+        func_str += arg[-2]
+        func_arg_list += arg[-3]
     p[0] = ["functcall", p[1], ["args", p[3]], func_arg_list, func_str, p.lineno(1)]
     print_log("p_functcall: ", p[0])
 
@@ -157,7 +157,7 @@ def p_arg_string(p):
 
 def p_string(p):
     '''string : STRING'''
-    p[0] = ["string", [], p[1]]
+    p[0] = ["string", [], p[1], p.lineno(1)]
 
 def p_arg_empty(p):
     '''arg : empty'''
@@ -182,9 +182,9 @@ def p_expression(p):
     if len(p) == 2:
         p[0] = p[1]
     else:
-        expr_arg_list = list(set(p[1][-2]) | set(p[3][-2]))
-        expr_str = p[1][-1] + p[2] + p[3][-1]
-        p[0] = [p[2], p[1], p[3], expr_arg_list, expr_str]
+        expr_arg_list = list(set(p[1][-3]) | set(p[3][-3]))
+        expr_str = p[1][-2] + p[2] + p[3][-2]
+        p[0] = [p[2], p[1], p[3], expr_arg_list, expr_str, p.lineno(1)]
     print_log("p_expression: ", p[0])
 
 def p_term(p):
@@ -192,9 +192,9 @@ def p_term(p):
             | factor DIVIDE term
             | factor'''
     if len(p) == 4:
-        term_arg_list = list(set(p[1][-2]) | set(p[3][-2]))
-        term_str = p[1][-1] + p[2] + p[3][-1]
-        p[0] = [p[2], p[1], p[3], term_arg_list, term_str]
+        term_arg_list = list(set(p[1][-3]) | set(p[3][-3]))
+        term_str = p[1][-2] + p[2] + p[3][-2]
+        p[0] = [p[2], p[1], p[3], term_arg_list, term_str, p.lineno(1)]
     else:
         p[0] = p[1]
     print_log("p_term: ", p[0])
@@ -205,15 +205,15 @@ def p_factor_num(p):
               | LPAREN PLUS NUMBER RPAREN
               | LPAREN MINUS NUMBER RPAREN'''
     if len(p) == 2:
-      p[0] = ["number", p[1], [], str(p[1])]
+      p[0] = ["number", p[1], [], str(p[1]), p.lineno(1)]
     elif len(p) == 4:
-      p[0] = ["number", p[2], [], str(p[2])]
+      p[0] = ["number", p[2], [], str(p[2]), p.lineno(1)]
     else:
       if (p[2] == '+'):
         num = p[3]
       elif (p[2] == '-'):
         num = -p[3]
-      p[0] = ["number", num, [], str(num)]
+      p[0] = ["number", num, [], str(num), p.lineno(1)]
 
     print_log("p_factor: ", p[0])
 
@@ -231,18 +231,18 @@ def p_id(p):
     '''id : ID
           | ID LBRACKET expression RBRACKET'''
     if len(p) == 2:
-        p[0] = ["id", p[1], [p[1]], p[1]]
+        p[0] = ["id", p[1], [p[1]], p[1], p.lineno(1)]
     else:
-        array_arg_list = list(set([p[1]]) | set(p[3][-2]))
-        array_str = p[1] + '[' + p[3][-1] + ']'
-        p[0] = ["array", p[1], p[3], array_arg_list, array_str]
+        array_arg_list = list(set([p[1]]) | set(p[3][-3]))
+        array_str = p[1] + '[' + p[3][-2] + ']'
+        p[0] = ["array", p[1], p[3], array_arg_list, array_str, p.lineno(1)]
     print_log("p_factor: ", p[0])
 
 def p_casting(p):
     '''casting : LPAREN INT RPAREN expression
                | LPAREN FLOAT RPAREN expression'''
-    casting_str = '(' + p[2] + ')'+p[4][-1]
-    p[0] = ["casting", p[2], p[4], p[4][-2], casting_str]
+    casting_str = '(' + p[2] + ')'+p[4][-2]
+    p[0] = ["casting", p[2], p[4], p[4][-3], casting_str, p.lineno(1)]
     print_log("p_casting: ", p[0])
 
 def p_forloop(p):
