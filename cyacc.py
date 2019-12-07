@@ -162,7 +162,7 @@ def p_string(p):
 def p_arg_empty(p):
     '''arg : empty'''
     p[0] = None
-    print_log("p_arg: ", p[0], [], "")
+    print_log("p_arg: ", p[0])
 
 def p_return(p):
     '''return : RETURN expression

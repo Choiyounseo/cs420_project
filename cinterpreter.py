@@ -46,6 +46,7 @@ CP_DICT = {}
 CS_DICT = {}
 IS_IN_OPTIMIZATION = False
 
+FUNCTION_DICT = {}
 
 class Return:
     def __init__(self, value):
@@ -104,7 +105,7 @@ class Scope:
         self.stmts = copy.deepcopy(stmts)
         self.type = type
         self.idx = 0
-        self.dest = None  # Where the return value had to be located
+        self.dest = [] # Where the return value had to be located
 
     def is_done(self):
         return self.idx == len(self.stmts)
@@ -381,13 +382,22 @@ def next_expr(func, expr, lineno):
 
         return True, var.value
     elif behavior == 'functcall':
-        used_vars, expr_str = expr[3:5]
-        func.access_csi(expr_str, used_vars, lineno)
+        scope = func.stack.top()
+        if len(scope.dest) != 0:
+            expr[:] = ['number', scope.dest[0]]
+            scope.dest = scope.dest[1:]
+            print("functcall with dest")
+            return next_expr(func, expr, lineno)
+        
+        callee, args_info, tmp1, tmp2, lineno = expr[1:]
+        # error if functcall function is 'printf' -> this function call value is used for assignment!
+        if not callee in FUNCTION_DICT:
+            raise PException(f"{callee} function doesn't exist")
+        else:
+            MAIN_STACK.push(Function(FUNCTION_DICT[callee]))
 
-        func.dest = []
-        # TODO: push to the stack for functcall
-        expr = func.dest
-        return None, False
+        next_line()
+        return False, None
     elif behavior == 'casting':
         used_vars, expr_str = expr[3:]
         func.access_csi(expr_str, used_vars, lineno)
@@ -457,14 +467,16 @@ def next_line():
     stmt_lineno = stmt[-1]
     if isinstance(stmt_lineno, list):
         stmt_lineno = stmt_lineno[0]
-    if CURRENT_LINE + 1 < stmt_lineno:
-        return
+    # if CURRENT_LINE + 1 < stmt_lineno:
+    #     return
 
     if isinstance(scope, SubScope):
         scope.update_next_idx()
 
     behavior = stmt[0]
     if behavior in ["{", "}"]:
+        lineno = stmt[1]
+        CURRENT_LINE = lineno
         scope.idx += 1
 
     elif behavior == "declare":
@@ -476,6 +488,7 @@ def next_line():
         '''
         var_type, var_list, lineno = stmt[1:]
         for var in var_list:
+            skip = 0
             if var[0] is 'array':
                 finished, index_value = next_expr(func, var[2], lineno)
                 if not finished:
@@ -497,6 +510,7 @@ def next_line():
                         func.declare_var(var_type, var_name, lineno)
                     else:
                         if scope.type is ScopeType.FOR:
+                            skip = 1
                             scope.update_idx()
                             next_line()
                         else:
@@ -504,7 +518,7 @@ def next_line():
                 else:
                     func.declare_var(var_type, var_name, lineno)
         # Declaration in for-statement invoked once at first.
-        # CURRENT_LINE = lineno + skip
+        CURRENT_LINE = lineno + skip
         scope.idx += 1
 
     elif behavior == "assign":
@@ -513,6 +527,11 @@ def next_line():
         ['assign', ['array', 'mark', ['id', 'i', ['i'], 'i'], ['mark', 'i'], 'mark[i]'], expr, 1]
         '''
         var_info, expr, lineno = stmt[1:]
+        if expr[0] == 'functcall':
+            if len(scope.dest) == 0:
+                next_expr(func, expr, lineno)
+                return
+        
         if var_info[0] is 'id':
             lhs = var_info[1]
         elif var_info[0] is 'array':
@@ -528,6 +547,7 @@ def next_line():
             raise PException(f"Variable {lhs} not found")
 
         finished, value = next_expr(func, expr, lineno)
+        
         if finished:
             var.assign(value, lineno)
             update_optimization_information_with_assign(func, expr, lineno, lhs)
@@ -541,6 +561,7 @@ def next_line():
                 # copy propagation cannot be from inner scope to outer scope
                 if not var_info[1] in scope.assigned_vars:
                     scope.assigned_vars.append(lhs)
+            CURRENT_LINE = lineno
             scope.idx += 1
 
     elif behavior == "increment":
@@ -562,6 +583,7 @@ def next_line():
                 if lineno == scope.line_no[0]:
                     scope.update_idx()
                     next_line()
+        CURRENT_LINE = lineno
         scope.idx += 1
 
     elif behavior == "for":
@@ -573,6 +595,8 @@ def next_line():
                 [3, 5]]
         '''
         func.stack.push(SubScope(stmt[1:-1], stmt[-1], ScopeType.FOR))
+        lineno = stmt[-1][0]
+        CURRENT_LINE = lineno
         next_line()
     elif behavior == "if":
         '''
@@ -581,6 +605,8 @@ def next_line():
                [21, 23]]
         '''
         func.stack.push(SubScope(stmt[1:-1], stmt[-1], ScopeType.IF))
+        lineno = stmt[-1][0]
+        CURRENT_LINE = lineno
         next_line()
     elif behavior == "functcall":
         '''
@@ -612,14 +638,34 @@ def next_line():
 
             if not IS_IN_OPTIMIZATION:
                 print(print_format % tuple(args))
+            
+            CURRENT_LINE = lineno
             scope.idx += 1
+        else:     
+            # check whether function is defined function or not
+            if not callee in FUNCTION_DICT:
+                raise PException(f"{callee} function doesn't exist")
+            else:
+                MAIN_STACK.push(Function(FUNCTION_DICT[callee]))
+            
+            CURRENT_LINE = lineno
+            scope.idx += 1
+            # to skip functcall line as one next line
+            next_line()
 
     elif behavior == "return":
         '''
         ['return', ['/', ['id', ['total'], 'total'], ['id', ['count'], 'count']], 6]
         '''
-        pass
-
+        # use 'Return' class
+        # Remove currently running function stack
+        expr, lineno = stmt[1:]
+        MAIN_STACK.pop()
+        success, value = next_expr(func, expr, lineno)
+        MAIN_STACK.push(Return(value))
+        scope.idx += 1
+        CURRENT_LINE = lineno
+    
     elif behavior == "condition":
         '''
         ['condition', 'a', '>', ['number', 0.0, [0.0], '0.0'], 3]
@@ -655,10 +701,18 @@ def next_line():
 
     while not MAIN_STACK.isEmpty():
         func = MAIN_STACK.top()
+
+        if isinstance(func, Return):
+            value = func.value
+            MAIN_STACK.pop()
+            # function which called 'functcall' statement
+            func = MAIN_STACK.top()
+            func.stack.top().dest.append(value)
+
         if func.stack.isEmpty():
             MAIN_STACK.pop()
             continue
-
+        
         scope = func.stack.top()
         if scope.is_done():
             if isinstance(scope, SubScope):
@@ -684,13 +738,13 @@ def interpret_initialization(tree):
     # Function index
     func = {}
     for func_info in tree:
-        func[func_info[2]] = func_info
+        FUNCTION_DICT[func_info[2]] = func_info
 
-    if "main" not in func:
+    if "main" not in FUNCTION_DICT:
         raise PException("Main function doesn't exist")
 
-    MAIN_STACK.push(Function(func["main"]))
-    CURRENT_LINE = func["main"][-1][0]
+    MAIN_STACK.push(Function(FUNCTION_DICT["main"]))
+    CURRENT_LINE = FUNCTION_DICT["main"][-1][0]
 
 
 def interpret(tree):
@@ -716,7 +770,7 @@ def interpret(tree):
             cnt = int(cmd[1])
             while cnt > 0:
                 next_line()
-                CURRENT_LINE += 1
+                # CURRENT_LINE += 1
                 cnt -= 1
 
         elif cmd[0] == "print":
@@ -913,7 +967,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         input_filename = sys.argv[1]
     else:
-        input_filename = "common_subexpression_elimination1.c"
+        input_filename = "function_call2.c"
 
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
