@@ -162,8 +162,6 @@ class SubScope(Scope):
             else:
                 # 3 ~ : stmts in for loop
                 self.next_idx = self.idx + 1
-                if self.next_idx >= len(self.stmts):
-                    self.next_idx = 2
 
     def set_done(self):
         self.is_condition_true = False
@@ -484,6 +482,12 @@ def next_line():
 
     scope = func.stack.top()
 
+    # change current line to first line of for-loop if current line is last line of for-loop
+    if isinstance(scope, SubScope) and scope.type == ScopeType.FOR:
+        if scope.idx >= len(scope.stmts):
+            scope.idx = 2
+            CURRENT_LINE = scope.line_no[0] - 1
+
     stmt = scope.stmts[scope.idx]
 
     stmt_lineno = stmt[-1]
@@ -739,9 +743,6 @@ def next_line():
 
     if isinstance(scope, SubScope):
         scope.update_idx()
-        # change current line to first line of for-loop if current line is last line of for-loop
-        if scope.type == ScopeType.FOR and CURRENT_LINE == scope.line_no[1]:
-            CURRENT_LINE = scope.line_no[0] - 1
 
     while not MAIN_STACK.isEmpty():
         func = MAIN_STACK.top()
