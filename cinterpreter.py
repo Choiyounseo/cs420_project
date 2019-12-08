@@ -291,7 +291,7 @@ class Function:
 
 def add_cp_id(func, expr, lineno):
     global CP_DICT
-    print(expr[1])
+    # print(expr[1])
     cpi = func.get_cpi(expr[1])
     if cpi is None:
         raise PException(f"Declared variable {expr[1]} doesn't have cpi")
@@ -398,21 +398,25 @@ def next_expr(func, expr, lineno):
             args_info = args_info[1]
             args = []
             for arg in args_info:
-                if arg[0] == 'id':
-                    var = func.get_var(arg[1])
-                    if var is None:
-                        raise PException(f"Varaible {args_info[1]} not found")
-                    args.append(var.value)
-                elif arg[0] == 'array':
-                    finished, index_var = next_expr(func, arg[2], lineno)
-                    if not finished:
-                        PException(f"array index cannot be resolved")
-                    var = func.get_var(arg[1] + '[' + str(index_var) + ']')
-                    if var is None:
-                        raise PException(f"Varaible {args_info[1]} not found")
-                    args.append(var.value)
-                elif arg[0] == 'number':
-                    args.append(arg[1])
+                finished, arg = next_expr(func, arg, lineno)
+                # print("arg: ", arg)
+                # if arg[0] == 'id':
+                #     var = func.get_var(arg[1])
+                #     if var is None:
+                #         raise PException(f"Varaible {args_info[1]} not found")
+                #     args.append(var.value)
+                # elif arg[0] == 'array':
+                #     finished, index_var = next_expr(func, arg[2], lineno)
+                #     if not finished:
+                #         PException(f"array index cannot be resolved")
+                #     var = func.get_var(arg[1] + '[' + str(index_var) + ']')
+                #     if var is None:
+                #         raise PException(f"Varaible {args_info[1]} not found")
+                #     args.append(var.value)
+                # elif arg[0] == 'number':
+                #     args.append(arg[1])
+                if finished:
+                    args.append(arg)
             new_func = Function(FUNCTION_DICT[callee], args)
             MAIN_STACK.push(new_func)
             CURRENT_LINE = FUNCTION_DICT[callee][4][0][1] - 1
@@ -674,21 +678,25 @@ def next_line():
                 args_info = args_info[1]
                 args = []
                 for arg in args_info:
-                    if arg[0] == 'id':
-                        var = func.get_var(arg[1])
-                        if var is None:
-                            raise PException(f"Varaible {args_info[1]} not found")
-                        args.append(var.value)
-                    elif arg[0] == 'array':
-                        finished, index_var = next_expr(func, arg[2], lineno)
-                        if not finished:
-                            PException(f"array index cannot be resolved")
-                        var = func.get_var(arg[1] + '[' + str(index_var) + ']')
-                        if var is None:
-                            raise PException(f"Varaible {args_info[1]} not found")
-                        args.append(var.value)
-                    elif arg[0] == 'number':
-                        args.append(arg[1])
+                    finished, arg = next_expr(func, arg, lineno)
+                    # print("arg: ", arg)
+                    # if arg[0] == 'id':
+                    #     var = func.get_var(arg[1])
+                    #     if var is None:
+                    #         raise PException(f"Varaible {args_info[1]} not found")
+                    #     args.append(var.value)
+                    # elif arg[0] == 'array':
+                    #     finished, index_var = next_expr(func, arg[2], lineno)
+                    #     if not finished:
+                    #         PException(f"array index cannot be resolved")
+                    #     var = func.get_var(arg[1] + '[' + str(index_var) + ']')
+                    #     if var is None:
+                    #         raise PException(f"Varaible {args_info[1]} not found")
+                    #     args.append(var.value)
+                    # elif arg[0] == 'number':
+                    #     args.append(arg[1])
+                    if finished:
+                        args.append(arg)
                 new_func = Function(FUNCTION_DICT[callee], args)
                 MAIN_STACK.push(new_func)
             
