@@ -200,6 +200,13 @@ class Function:
         for param, arg in zip(params, args):
             self.vars[param[2]] = [arg]
 
+        if len(params) != 0:
+            for param in params:
+                if param[0] is 'id':
+                    self.declare_cpi(param[2], -1)
+
+
+
         # Func Scope
         self.stack.push(Scope(func[4], ScopeType.FUNC))
 
@@ -286,7 +293,7 @@ class Function:
 
 def add_cp_id(func, expr, lineno):
     global CP_DICT
-
+    print(expr[1])
     cpi = func.get_cpi(expr[1])
     if cpi is None:
         raise PException(f"Declared variable {expr[1]} doesn't have cpi")
@@ -375,7 +382,7 @@ def next_expr(func, expr, lineno):
         if var is None:
             raise PException(f"Variable {expr[1]} not found")
         # TODO: need to fix error
-        # add_cp_id(func, expr, lineno)
+        add_cp_id(func, expr, lineno)
 
         return True, var.value
     elif behavior == 'functcall':
@@ -1004,7 +1011,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         input_filename = sys.argv[1]
     else:
-        input_filename = "function_call5.c"
+        input_filename = "function_call1.c"
 
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
