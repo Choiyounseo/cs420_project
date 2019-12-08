@@ -198,10 +198,7 @@ class Function:
             raise PException(f"Function {name}, expected {expected_args_length} arguments, but {len(args)} given")
 
         for param, arg in zip(params, args):
-            if "int" in param[1]:
-                self.vars[param[2]] = int(arg)
-            elif "float" in param[1]:
-                self.vars[param[2]] = float(arg)
+            self.vars[param[2]] = [arg]
 
         # Func Scope
         self.stack.push(Scope(func[4], ScopeType.FUNC))
@@ -377,8 +374,8 @@ def next_expr(func, expr, lineno):
         var = func.get_var(expr[1])
         if var is None:
             raise PException(f"Variable {expr[1]} not found")
-
-        add_cp_id(func, expr, lineno)
+        # TODO: need to fix error
+        # add_cp_id(func, expr, lineno)
 
         return True, var.value
     elif behavior == 'functcall':
@@ -386,7 +383,6 @@ def next_expr(func, expr, lineno):
         if len(scope.dest) != 0:
             expr[:] = ['number', scope.dest[0]]
             scope.dest = scope.dest[1:]
-            print("functcall with dest")
             return next_expr(func, expr, lineno)
         
         callee, args_info, tmp1, tmp2, lineno = expr[1:]
@@ -394,7 +390,27 @@ def next_expr(func, expr, lineno):
         if not callee in FUNCTION_DICT:
             raise PException(f"{callee} function doesn't exist")
         else:
-            MAIN_STACK.push(Function(FUNCTION_DICT[callee]))
+            args_info = args_info[1]
+            args = []
+            for arg in args_info:
+                if arg[0] == 'id':
+                    var = func.get_var(arg[1])
+                    if var is None:
+                        raise PException(f"Varaible {args_info[1]} not found")
+                    args.append(var)
+                elif arg[0] == 'array':
+                    finished, index_var = next_expr(func, arg[2], lineno)
+                    if not finished:
+                        PException(f"array index cannot be resolved")
+                    var = func.get_var(arg[1] + '[' + str(index_var) + ']')
+                    if var is None:
+                        raise PException(f"Varaible {args_info[1]} not found")
+                    args.append(var)
+                elif arg[0] == 'number':
+                    args.append(arg[1])
+            print("args: ", args)
+            new_func = Function(FUNCTION_DICT[callee], args)
+            MAIN_STACK.push(new_func)
 
         next_line()
         return False, None
@@ -429,6 +445,7 @@ def next_expr(func, expr, lineno):
     else:
         used_vars, expr_str = expr[3:5]
         func.access_csi(expr_str, used_vars, lineno)
+
         finished, value1 = next_expr(func, expr[1], lineno)
         if not finished:
             return False, None
@@ -641,12 +658,32 @@ def next_line():
             
             CURRENT_LINE = lineno
             scope.idx += 1
-        else:     
+        else:
             # check whether function is defined function or not
             if not callee in FUNCTION_DICT:
                 raise PException(f"{callee} function doesn't exist")
             else:
-                MAIN_STACK.push(Function(FUNCTION_DICT[callee]))
+                args_info = args_info[1]
+                args = []
+                for arg in args_info:
+                    if arg[0] == 'id':
+                        var = func.get_var(arg[1])
+                        if var is None:
+                            raise PException(f"Varaible {args_info[1]} not found")
+                        args.append(var)
+                    elif arg[0] == 'array':
+                        finished, index_var = next_expr(func, arg[2], lineno)
+                        if not finished:
+                            PException(f"array index cannot be resolved")
+                        var = func.get_var(arg[1] + '[' + str(index_var) + ']')
+                        if var is None:
+                            raise PException(f"Varaible {args_info[1]} not found")
+                        args.append(var)
+                    elif arg[0] == 'number':
+                        args.append(arg[1])
+                print("args: ", args)
+                new_func = Function(FUNCTION_DICT[callee], args)
+                MAIN_STACK.push(new_func)
             
             CURRENT_LINE = lineno
             scope.idx += 1
@@ -967,7 +1004,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         input_filename = sys.argv[1]
     else:
-        input_filename = "function_call3.c"
+        input_filename = "function_call5.c"
 
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
