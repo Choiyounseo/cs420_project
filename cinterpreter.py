@@ -54,10 +54,10 @@ class Return:
 
 
 class VAR:
-    def __init__(self, var_type, lineno):
+    def __init__(self, var_type, lineno, value=None):
         self.type = var_type
-        self.value = None
-        self.history = [[lineno, None]]
+        self.value = value
+        self.history = [[lineno, value]]
 
     def assign(self, value, lineno):
         if "int" in self.type:
@@ -198,14 +198,15 @@ class Function:
             raise PException(f"Function {name}, expected {expected_args_length} arguments, but {len(args)} given")
 
         for param, arg in zip(params, args):
-            self.vars[param[2]] = [arg]
+            if 'int' in param[1]:
+                self.vars[param[2]] = [VAR('int', func[-1][0], arg)]
+            elif 'float' in param[1]:
+                self.vars[param[2]] = [VAR('float', func[-1][0], arg)]
 
         if len(params) != 0:
             for param in params:
                 if param[0] is 'id':
                     self.declare_cpi(param[2], -1)
-
-
 
         # Func Scope
         self.stack.push(Scope(func[4], ScopeType.FUNC))
@@ -404,7 +405,7 @@ def next_expr(func, expr, lineno):
                     var = func.get_var(arg[1])
                     if var is None:
                         raise PException(f"Varaible {args_info[1]} not found")
-                    args.append(var)
+                    args.append(var.value)
                 elif arg[0] == 'array':
                     finished, index_var = next_expr(func, arg[2], lineno)
                     if not finished:
@@ -412,10 +413,9 @@ def next_expr(func, expr, lineno):
                     var = func.get_var(arg[1] + '[' + str(index_var) + ']')
                     if var is None:
                         raise PException(f"Varaible {args_info[1]} not found")
-                    args.append(var)
+                    args.append(var.value)
                 elif arg[0] == 'number':
                     args.append(arg[1])
-            print("args: ", args)
             new_func = Function(FUNCTION_DICT[callee], args)
             MAIN_STACK.push(new_func)
 
@@ -679,7 +679,7 @@ def next_line():
                         var = func.get_var(arg[1])
                         if var is None:
                             raise PException(f"Varaible {args_info[1]} not found")
-                        args.append(var)
+                        args.append(var.value)
                     elif arg[0] == 'array':
                         finished, index_var = next_expr(func, arg[2], lineno)
                         if not finished:
@@ -687,10 +687,9 @@ def next_line():
                         var = func.get_var(arg[1] + '[' + str(index_var) + ']')
                         if var is None:
                             raise PException(f"Varaible {args_info[1]} not found")
-                        args.append(var)
+                        args.append(var.value)
                     elif arg[0] == 'number':
                         args.append(arg[1])
-                print("args: ", args)
                 new_func = Function(FUNCTION_DICT[callee], args)
                 MAIN_STACK.push(new_func)
             
@@ -1013,7 +1012,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         input_filename = sys.argv[1]
     else:
-        input_filename = "function_call1.c"
+        input_filename = "function_call7.c"
 
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
