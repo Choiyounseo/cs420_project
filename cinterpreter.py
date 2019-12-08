@@ -162,8 +162,6 @@ class SubScope(Scope):
             else:
                 # 3 ~ : stmts in for loop
                 self.next_idx = self.idx + 1
-                if self.next_idx >= len(self.stmts):
-                    self.next_idx = 2
 
     def set_done(self):
         self.is_condition_true = False
@@ -291,7 +289,6 @@ class Function:
 
 def add_cp_id(func, expr, lineno):
     global CP_DICT
-    # print(expr[1])
     cpi = func.get_cpi(expr[1])
     if cpi is None:
         raise PException(f"Declared variable {expr[1]} doesn't have cpi")
@@ -389,7 +386,7 @@ def next_expr(func, expr, lineno):
             expr[:] = ['number', scope.dest[0]]
             scope.dest = scope.dest[1:]
             return next_expr(func, expr, lineno)
-        
+
         callee, args_info, tmp1, tmp2, lineno = expr[1:]
         # error if functcall function is 'printf' -> this function call value is used for assignment!
         if not callee in FUNCTION_DICT:
@@ -488,6 +485,12 @@ def next_line():
 
     scope = func.stack.top()
 
+    # change current line to first line of for-loop if current line is last line of for-loop
+    if isinstance(scope, SubScope) and scope.type == ScopeType.FOR:
+        if scope.idx >= len(scope.stmts):
+            scope.idx = 2
+            CURRENT_LINE = scope.line_no[0] - 1
+
     stmt = scope.stmts[scope.idx]
 
     stmt_lineno = stmt[-1]
@@ -562,7 +565,7 @@ def next_line():
             if len(scope.dest) == 0:
                 next_expr(func, expr, lineno)
                 return
-        
+
         if var_info[0] is 'id':
             lhs = var_info[1]
         elif var_info[0] is 'array':
@@ -578,7 +581,7 @@ def next_line():
             raise PException(f"Variable {lhs} not found")
 
         finished, value = next_expr(func, expr, lineno)
-        
+
         if finished:
             var.assign(value, lineno)
             update_optimization_information_with_assign(func, expr, lineno, lhs)
@@ -667,7 +670,7 @@ def next_line():
 
             if not IS_IN_OPTIMIZATION:
                 print(print_format % tuple(args))
-            
+
             CURRENT_LINE = lineno
             scope.idx += 1
         else:
@@ -699,7 +702,7 @@ def next_line():
                         args.append(arg)
                 new_func = Function(FUNCTION_DICT[callee], args)
                 MAIN_STACK.push(new_func)
-            
+
             CURRENT_LINE = lineno
             scope.idx += 1
             next_line()
@@ -716,7 +719,7 @@ def next_line():
         MAIN_STACK.push(Return(value))
         scope.idx += 1
         CURRENT_LINE = lineno
-    
+
     elif behavior == "condition":
         '''
         ['condition', 'a', '>', ['number', 0.0, [0.0], '0.0'], 3]
@@ -747,9 +750,6 @@ def next_line():
 
     if isinstance(scope, SubScope):
         scope.update_idx()
-        # change current line to first line of for-loop if current line is last line of for-loop
-        if scope.type == ScopeType.FOR and CURRENT_LINE == scope.line_no[1]:
-            CURRENT_LINE = scope.line_no[0] - 1
 
     while not MAIN_STACK.isEmpty():
         func = MAIN_STACK.top()
@@ -764,7 +764,7 @@ def next_line():
         if func.stack.isEmpty():
             MAIN_STACK.pop()
             continue
-        
+
         scope = func.stack.top()
         if scope.is_done():
             if isinstance(scope, SubScope):
@@ -788,7 +788,6 @@ def interpret_initialization(tree):
     global CURRENT_LINE
 
     # Function index
-    func = {}
     for func_info in tree:
         FUNCTION_DICT[func_info[2]] = func_info
 
@@ -861,12 +860,14 @@ def process_without_input():
     global CURRENT_LINE
     global CP_DICT
     global CS_DICT
+    global FUNCTION_DICT
 
     # initialize
     MAIN_STACK = Stack()
     CURRENT_LINE = 0
     CP_DICT = {}
     CS_DICT = {}
+    FUNCTION_DICT = {}
 
     # process whole lines
     tree = get_parser_tree(PLAIN_CODE_ONE_LINE)
@@ -874,7 +875,6 @@ def process_without_input():
 
     while not MAIN_STACK.isEmpty():
         next_line()
-        CURRENT_LINE += 1
 
 
 def load_input_file(filename):
