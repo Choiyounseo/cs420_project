@@ -491,8 +491,10 @@ def next_line():
     stmt_lineno = stmt[-1]
     if isinstance(stmt_lineno, list):
         stmt_lineno = stmt_lineno[0]
-    # if CURRENT_LINE + 1 < stmt_lineno:
-    #     return
+
+    if CURRENT_LINE + 1 < stmt_lineno:
+        CURRENT_LINE += 1
+        return
 
     if isinstance(scope, SubScope):
         scope.update_next_idx()
