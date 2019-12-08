@@ -176,7 +176,6 @@ def p_return(p):
 def p_expression(p):
     '''expression : term PLUS expression
                   | term MINUS expression
-                  | functcall
                   | term
                   | casting'''
     if len(p) == 2:
@@ -198,6 +197,11 @@ def p_term(p):
     else:
         p[0] = p[1]
     print_log("p_term: ", p[0])
+
+def p_factor_functcall(p):
+    '''factor : functcall'''
+    p[0] = p[1]
+    print_log("p_factor_functcall: ", p[0])
 
 def p_factor_num(p):
     '''factor : NUMBER
