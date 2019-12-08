@@ -1,12 +1,14 @@
 int sum(int num) {
- if (num > 0) {
- num = num + sum(num - 1);
- }
- return num;
+    int tmp;
+    if (num > 0) {
+        tmp = num - 1;
+        num = num + sum(tmp);
+    }
+    return num;
 }
 
 int main(void) {
- int a;
-a = sum(50);
-printf("%d\n", a);
+    int a;
+    a = sum(50);
+    printf("%d\n", a);
 }
