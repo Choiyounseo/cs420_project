@@ -5,3 +5,9 @@
 # pycharm for mac
 .idea
 __pycache__
+.gitignore
+venv/
+parser.out
+parsetab.py
+output.c
+
