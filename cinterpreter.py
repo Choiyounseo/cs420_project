@@ -514,7 +514,6 @@ def next_line():
         '''
         var_type, var_list, lineno = stmt[1:]
         for var in var_list:
-            skip = 0
             if var[0] is 'array':
                 finished, index_value = next_expr(func, var[2], lineno)
                 if not finished:
@@ -536,7 +535,6 @@ def next_line():
                         func.declare_var(var_type, var_name, lineno)
                     else:
                         if scope.type is ScopeType.FOR:
-                            skip = 1
                             scope.update_idx()
                             next_line()
                         else:
@@ -544,7 +542,7 @@ def next_line():
                 else:
                     func.declare_var(var_type, var_name, lineno)
         # Declaration in for-statement invoked once at first.
-        CURRENT_LINE = lineno + skip
+        CURRENT_LINE = lineno
         scope.idx += 1
 
     elif behavior == "assign":
@@ -695,7 +693,6 @@ def next_line():
             
             CURRENT_LINE = lineno
             scope.idx += 1
-            # to skip functcall line as one next line
             next_line()
 
     elif behavior == "return":
