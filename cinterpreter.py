@@ -967,7 +967,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         input_filename = sys.argv[1]
     else:
-        input_filename = "function_call4.c"
+        input_filename = "function_call3.c"
 
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
