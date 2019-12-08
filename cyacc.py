@@ -174,8 +174,8 @@ def p_return(p):
     print_log("p_return: ", p[0])
 
 def p_expression(p):
-    '''expression : term PLUS expression
-                  | term MINUS expression
+    '''expression : expression PLUS term
+                  | expression MINUS term
                   | functcall
                   | term
                   | casting'''
@@ -188,8 +188,8 @@ def p_expression(p):
     print_log("p_expression: ", p[0])
 
 def p_term(p):
-    '''term : factor STAR term
-            | factor DIVIDE term
+    '''term : term STAR factor
+            | term DIVIDE factor
             | factor'''
     if len(p) == 4:
         term_arg_list = list(set(p[1][-2]) | set(p[3][-2]))
