@@ -22,11 +22,11 @@ def p_funclist(p):
 
 # ignore function inside function ..
 def p_func(p):
-    '''func : INT ID LPAREN paramlist RPAREN LBRACE stmtlist RBRACE
-            | FLOAT ID LPAREN paramlist RPAREN LBRACE stmtlist RBRACE
-            | VOID ID LPAREN paramlist RPAREN LBRACE stmtlist RBRACE
+    '''func : INT ID LPAREN paramlist RPAREN lbrace stmtlist rbrace
+            | FLOAT ID LPAREN paramlist RPAREN lbrace stmtlist rbrace
+            | VOID ID LPAREN paramlist RPAREN lbrace stmtlist rbrace
     '''
-    p[0] = ["function", p[1], p[2], ["parameter", p[4]], p[7], [p.lineno(1), p.lineno(8)]]
+    p[0] = ["function", p[1], p[2], ["parameter", p[4]], [p[6]] + p[7] + [p[8]], [p.lineno(1), p[8][1]]]
     print_log("p_func: ", p[0])
 
 def p_paramlist(p):
@@ -125,9 +125,9 @@ def p_functcall(p):
     for arg in p[3]:
         if p[3].index(arg) is not 0:
             func_str += ','
-        func_str += arg[-1]
-        func_arg_list += arg[-2]
-    p[0] = ["functcall", p[1], ["args", p[3]], p.lineno(1), func_arg_list, func_str]
+        func_str += arg[-2]
+        func_arg_list += arg[-3]
+    p[0] = ["functcall", p[1], ["args", p[3]], func_arg_list, func_str, p.lineno(1)]
     print_log("p_functcall: ", p[0])
 
 def p_arglist(p):
@@ -157,12 +157,12 @@ def p_arg_string(p):
 
 def p_string(p):
     '''string : STRING'''
-    p[0] = ["string", [], p[1]]
+    p[0] = ["string", [], p[1], p.lineno(1)]
 
 def p_arg_empty(p):
     '''arg : empty'''
     p[0] = None
-    print_log("p_arg: ", p[0], [], "")
+    print_log("p_arg: ", p[0])
 
 def p_return(p):
     '''return : RETURN expression
@@ -174,30 +174,34 @@ def p_return(p):
     print_log("p_return: ", p[0])
 
 def p_expression(p):
-    '''expression : term PLUS expression
-                  | term MINUS expression
-                  | functcall
+    '''expression : expression PLUS term
+                  | expression MINUS term
                   | term
                   | casting'''
     if len(p) == 2:
         p[0] = p[1]
     else:
-        expr_arg_list = list(set(p[1][-2]) | set(p[3][-2]))
-        expr_str = p[1][-1] + p[2] + p[3][-1]
-        p[0] = [p[2], p[1], p[3], expr_arg_list, expr_str]
+        expr_arg_list = list(set(p[1][-3]) | set(p[3][-3]))
+        expr_str = p[1][-2] + p[2] + p[3][-2]
+        p[0] = [p[2], p[1], p[3], expr_arg_list, expr_str, p.lineno(1)]
     print_log("p_expression: ", p[0])
 
 def p_term(p):
-    '''term : factor STAR term
-            | factor DIVIDE term
+    '''term : term STAR factor
+            | term DIVIDE factor
             | factor'''
     if len(p) == 4:
-        term_arg_list = list(set(p[1][-2]) | set(p[3][-2]))
-        term_str = p[1][-1] + p[2] + p[3][-1]
-        p[0] = [p[2], p[1], p[3], term_arg_list, term_str]
+        term_arg_list = list(set(p[1][-3]) | set(p[3][-3]))
+        term_str = p[1][-2] + p[2] + p[3][-2]
+        p[0] = [p[2], p[1], p[3], term_arg_list, term_str, p.lineno(1)]
     else:
         p[0] = p[1]
     print_log("p_term: ", p[0])
+
+def p_factor_functcall(p):
+    '''factor : functcall'''
+    p[0] = p[1]
+    print_log("p_factor_functcall: ", p[0])
 
 def p_factor_num(p):
     '''factor : NUMBER
@@ -205,15 +209,15 @@ def p_factor_num(p):
               | LPAREN PLUS NUMBER RPAREN
               | LPAREN MINUS NUMBER RPAREN'''
     if len(p) == 2:
-      p[0] = ["number", p[1], [], str(p[1])]
+      p[0] = ["number", p[1], [], str(p[1]), p.lineno(1)]
     elif len(p) == 4:
-      p[0] = ["number", p[2], [], str(p[2])]
+      p[0] = ["number", p[2], [], str(p[2]), p.lineno(1)]
     else:
       if (p[2] == '+'):
         num = p[3]
       elif (p[2] == '-'):
         num = -p[3]
-      p[0] = ["number", num, [], str(num)]
+      p[0] = ["number", num, [], str(num), p.lineno(1)]
 
     print_log("p_factor: ", p[0])
 
@@ -231,27 +235,28 @@ def p_id(p):
     '''id : ID
           | ID LBRACKET expression RBRACKET'''
     if len(p) == 2:
-        p[0] = ["id", p[1], [p[1]], p[1]]
+        p[0] = ["id", p[1], [p[1]], p[1], p.lineno(1)]
     else:
-        array_str = p[1][-1] + '[' + p[3][-1] + ']'
-        p[0] = ["array", p[1], p[3], [p[1]], array_str]
+        array_arg_list = list(set([p[1]]) | set(p[3][-3]))
+        array_str = p[1] + '[' + p[3][-2] + ']'
+        p[0] = ["array", p[1], p[3], array_arg_list, array_str, p.lineno(1)]
     print_log("p_factor: ", p[0])
 
 def p_casting(p):
     '''casting : LPAREN INT RPAREN expression
                | LPAREN FLOAT RPAREN expression'''
-    casting_str = '(' + p[2] + ')'+p[4][-1]
-    p[0] = ["casting", p[2], p[4], p[4][-2], casting_str]
+    casting_str = '(' + p[2] + ')'+p[4][-2]
+    p[0] = ["casting", p[2], p[4], p[4][-3], casting_str, p.lineno(1)]
     print_log("p_casting: ", p[0])
 
 def p_forloop(p):
-    'forloop : FOR LPAREN assign SEMICOLON condition SEMICOLON increment RPAREN LBRACE stmtlist RBRACE'
-    p[0] = ["for", p[3], p[5], p[7], p[10], [p.lineno(1), p.lineno(11)]]
+    'forloop : FOR LPAREN assign SEMICOLON condition SEMICOLON increment RPAREN lbrace stmtlist rbrace'
+    p[0] = ["for", p[3], p[5], p[7], [p[9]] + p[10] + [p[11]], [p.lineno(1), p[11][1]]]
     print_log("p_forloop: ", p[0])
 
 def p_if(p):
-    'if : IF LPAREN condition RPAREN LBRACE stmtlist RBRACE'
-    p[0] = ["if", p[3], p[6], [p.lineno(1), p.lineno(7)]]
+    'if : IF LPAREN condition RPAREN lbrace stmtlist rbrace'
+    p[0] = ["if", p[3], [p[5]] + p[6] + [p[7]], [p.lineno(1), p[7][1]]]
     print_log("p_if: ", p[0])
 
 def p_condition(p):
@@ -269,6 +274,15 @@ def p_cmp(p):
     p[0] = p[1]
     print_log("p_cmp: ", p[0])
 
+def p_lbrace(p):
+    'lbrace : LBRACE'
+    p[0] = ["{", p.lineno(1)]
+
+def p_rbrace(p):
+    'rbrace : RBRACE'
+    p[0] = ["}", p.lineno(1)]
+
+
 def p_error(p):
     while True:
       tok = parser.token() # get the next token
@@ -280,7 +294,19 @@ def p_error(p):
     return tok
     # exit()
 
-clexer = CLexer()
-lexer = clexer.build()
-tokens = clexer.tokens
-parser = yacc.yacc()
+def get_parser_tree(code):
+    global parser
+    clexer = CLexer()
+    lexer = clexer.build()
+    tokens = clexer.tokens
+    parser = yacc.yacc()
+    return parser.parse(code, lexer=lexer)
+
+parser = None
+
+if __name__ == '__main__':
+    f = open("inputs/input0.c")
+    code = "".join(f.readlines())
+    f.close()
+
+    print(parser.parse(code, lexer=lexer))

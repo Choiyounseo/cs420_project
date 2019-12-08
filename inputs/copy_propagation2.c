@@ -1,9 +1,11 @@
 int main(void) {
-    int a;
+    int aab;
     int b;
-    a = 1;
+    int c;
+    aab = 1;
     for(b = 0; b < 10; b ++) {
         int a;
     }
-    c = a;
+    c = aab + aab;
+    b = aab * aab + aab;
 }
