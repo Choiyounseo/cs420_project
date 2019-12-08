@@ -1,18 +1,40 @@
-int main(void)
-{
+float avg(int length, int *value) {
+	int i;
+	float total;
+	total = 0;
+	for(i = 0; i < length; i++) {
+		total = total + value[i];
+	}
 
-    int a;
-    int c[2];
-    c[0] = 0;
-    printf("%d\n", c[0]);
-    c[1] = 1;
+	return (total / length);
+}
 
-    a = 2;
+int main(void) {
+	int count, i, total;
+	int record[5];
+	float average;
 
-    printf("%d\n", a);
-    a = a + 5 * 2;
-    printf("%d\n", a);
-    float b;
-    b = a / 5;
-    printf("%f\n", b);
+	count = 5;
+	total = 0;
+
+	for(i = 0; i < count; i++) {
+		record[i] = i * 1;
+		printf("value : ");
+		printf("%d\n", record[i]);
+	}
+
+	printf("\nStart...\n");
+
+	for(i = 0; i < count; i++) {
+		average = avg(i + 1, record);
+		total = total + average;
+		printf("Average : ");
+		printf("%f\n", average);
+		if(total > 3) {
+			printf("*** total exceeds 3!***\n");
+		}
+	}
+
+	printf("Done!\n");
+
 }
