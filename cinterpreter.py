@@ -198,10 +198,7 @@ class Function:
             raise PException(f"Function {name}, expected {expected_args_length} arguments, but {len(args)} given")
 
         for param, arg in zip(params, args):
-            if 'int' in param[1]:
-                self.vars[param[2]] = [VAR('int', func[-1][0], arg)]
-            elif 'float' in param[1]:
-                self.vars[param[2]] = [VAR('float', func[-1][0], arg)]
+            self.vars[param[2]] = [VAR(param[1], func[-1][0], arg)]
 
         if len(params) != 0:
             for param in params:
@@ -418,6 +415,7 @@ def next_expr(func, expr, lineno):
                     args.append(arg[1])
             new_func = Function(FUNCTION_DICT[callee], args)
             MAIN_STACK.push(new_func)
+            CURRENT_LINE = FUNCTION_DICT[callee][4][0][1] - 1
 
         next_line()
         return False, None
@@ -491,6 +489,11 @@ def next_line():
     stmt_lineno = stmt[-1]
     if isinstance(stmt_lineno, list):
         stmt_lineno = stmt_lineno[0]
+
+    if CURRENT_LINE >= stmt_lineno:
+        scope.idx += 1
+        next_line()
+        return
 
     if CURRENT_LINE + 1 < stmt_lineno:
         CURRENT_LINE += 1
@@ -619,8 +622,6 @@ def next_line():
                 [3, 5]]
         '''
         func.stack.push(SubScope(stmt[1:-1], stmt[-1], ScopeType.FOR))
-        lineno = stmt[-1][0]
-        CURRENT_LINE = lineno
         next_line()
     elif behavior == "if":
         '''
@@ -630,8 +631,8 @@ def next_line():
         '''
         func.stack.push(SubScope(stmt[1:-1], stmt[-1], ScopeType.IF))
         lineno = stmt[-1][0]
-        CURRENT_LINE = lineno
         next_line()
+
     elif behavior == "functcall":
         '''
         ['functcall', 'printf',
@@ -734,6 +735,7 @@ def next_line():
                 scope.set_done()
         else:
             raise PException(f"condition({condition}) is invalid", stmt[4])
+        CURRENT_LINE = stmt[-1]
 
     if isinstance(scope, SubScope):
         scope.update_idx()
@@ -786,7 +788,7 @@ def interpret_initialization(tree):
         raise PException("Main function doesn't exist")
 
     MAIN_STACK.push(Function(FUNCTION_DICT["main"]))
-    CURRENT_LINE = FUNCTION_DICT["main"][-1][0]
+    CURRENT_LINE = FUNCTION_DICT["main"][4][0][1] - 1
 
 
 def interpret(tree):
