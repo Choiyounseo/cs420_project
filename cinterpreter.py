@@ -396,22 +396,6 @@ def next_expr(func, expr, lineno):
             args = []
             for arg in args_info:
                 finished, arg = next_expr(func, arg, lineno)
-                # print("arg: ", arg)
-                # if arg[0] == 'id':
-                #     var = func.get_var(arg[1])
-                #     if var is None:
-                #         raise PException(f"Varaible {args_info[1]} not found")
-                #     args.append(var.value)
-                # elif arg[0] == 'array':
-                #     finished, index_var = next_expr(func, arg[2], lineno)
-                #     if not finished:
-                #         PException(f"array index cannot be resolved")
-                #     var = func.get_var(arg[1] + '[' + str(index_var) + ']')
-                #     if var is None:
-                #         raise PException(f"Varaible {args_info[1]} not found")
-                #     args.append(var.value)
-                # elif arg[0] == 'number':
-                #     args.append(arg[1])
                 if finished:
                     args.append(arg)
             new_func = Function(FUNCTION_DICT[callee], args)
@@ -482,8 +466,18 @@ def next_line():
     func = MAIN_STACK.top()
     if func is None:
         return
-
-    scope = func.stack.top()
+    
+    if isinstance(func, Return):
+            value = func.value
+            MAIN_STACK.pop()
+            # function which called 'functcall' statement
+            func = MAIN_STACK.top()
+            scope = func.stack.top()
+            scope.dest.append(value)
+            # put stmt lineno
+            CURRENT_LINE = scope.stmts[scope.idx][-1] -1
+    else:
+        scope = func.stack.top()
 
     # change current line to first line of for-loop if current line is last line of for-loop
     if isinstance(scope, SubScope) and scope.type == ScopeType.FOR:
@@ -682,22 +676,6 @@ def next_line():
                 args = []
                 for arg in args_info:
                     finished, arg = next_expr(func, arg, lineno)
-                    # print("arg: ", arg)
-                    # if arg[0] == 'id':
-                    #     var = func.get_var(arg[1])
-                    #     if var is None:
-                    #         raise PException(f"Varaible {args_info[1]} not found")
-                    #     args.append(var.value)
-                    # elif arg[0] == 'array':
-                    #     finished, index_var = next_expr(func, arg[2], lineno)
-                    #     if not finished:
-                    #         PException(f"array index cannot be resolved")
-                    #     var = func.get_var(arg[1] + '[' + str(index_var) + ']')
-                    #     if var is None:
-                    #         raise PException(f"Varaible {args_info[1]} not found")
-                    #     args.append(var.value)
-                    # elif arg[0] == 'number':
-                    #     args.append(arg[1])
                     if finished:
                         args.append(arg)
                 new_func = Function(FUNCTION_DICT[callee], args)
@@ -755,11 +733,7 @@ def next_line():
         func = MAIN_STACK.top()
 
         if isinstance(func, Return):
-            value = func.value
-            MAIN_STACK.pop()
-            # function which called 'functcall' statement
-            func = MAIN_STACK.top()
-            func.stack.top().dest.append(value)
+            return 
 
         if func.stack.isEmpty():
             MAIN_STACK.pop()
