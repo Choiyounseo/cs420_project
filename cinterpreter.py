@@ -742,6 +742,7 @@ def next_line():
         scope = func.stack.top()
         if scope.is_done():
             if isinstance(scope, SubScope):
+                CURRENT_LINE = scope.line_no[1]
                 remove_optimization_information_with_scope(func, scope)
                 for var in scope.declared_vars:
                     func.release_var(var)
