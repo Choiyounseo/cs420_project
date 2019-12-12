@@ -468,14 +468,14 @@ def next_line():
         return
     
     if isinstance(func, Return):
-            value = func.value
-            MAIN_STACK.pop()
-            # function which called 'functcall' statement
-            func = MAIN_STACK.top()
-            scope = func.stack.top()
-            scope.dest.append(value)
-            # put stmt lineno
-            CURRENT_LINE = scope.stmts[scope.idx][-1] -1
+        value = func.value
+        MAIN_STACK.pop()
+        # function which called 'functcall' statement
+        func = MAIN_STACK.top()
+        scope = func.stack.top()
+        scope.dest.append(value)
+        # put stmt lineno
+        CURRENT_LINE = scope.stmts[scope.idx][-1] -1
     else:
         scope = func.stack.top()
 
