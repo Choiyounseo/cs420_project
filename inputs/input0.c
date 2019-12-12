@@ -1,40 +1,45 @@
-float avg(int length, int *value) {
-	int i;
-	float total;
-	total = 0;
-	for(i = 0; i < length; i++) {
-		total = total + value[i];
-	}
-
-	return (total / length);
+void func()
+{
+    return;
 }
 
-int main(void) {
-	int count, i, total;
-	int record[5];
-	float average;
+int add(int a, int b)
+{
+    int c;
+    c = a + b;
+    return c;
+}
 
-	count = 5;
-	total = 0;
+float mul(float a, float b)
+{
+    return a * b;
+}
 
-	for(i = 0; i < count; i++) {
-		record[i] = i * 1;
-		printf("value : ");
-		printf("%d\n", record[i]);
-	}
+int main(void)
+{
+    int i;
+    for (i = 0; i < 5; i ++) {
+        printf ("%d\n", i + 1);
+        printf ("%d\n", mul(2, i));
 
-	printf("\nStart...\n");
+        int k;
+        k = mul(2, i);
+        if (k > 6) {
+            printf ("Good!\n");
+        }
+    }
 
-	for(i = 0; i < count; i++) {
-		average = avg(i + 1, record);
-		total = total + average;
-		printf("Average : ");
-		printf("%f\n", average);
-		if(total > 3) {
-			printf("*** total exceeds 3!***\n");
-		}
-	}
+    func();
 
-	printf("Done!\n");
+    printf ("%d\n", add((int)1.5, (int)(2 + 1.5)));
 
+    int j;
+    j = mul(3, 4);
+    if (j > 10) {
+        printf ("%d\n", j);
+    }
+
+    if (j < 10) {
+        printf ("It's incorrect\n");
+    }
 }
