@@ -1,11 +1,8 @@
 int sum(int num) {
-	int num2;
-	num2 = 0;
     if (num > 0) {
-        num2 = sum(num-1);
-        num2 = num2 + num;
+        num = num + sum(num-1);
     }
-    return num2;
+    return num;
 }
 
 int main(void) {

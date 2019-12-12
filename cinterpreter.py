@@ -502,7 +502,7 @@ def next_line():
 
     if isinstance(scope, SubScope):
         scope.update_next_idx()
-
+    
     behavior = stmt[0]
     if behavior in ["{", "}"]:
         lineno = stmt[1]
@@ -555,10 +555,6 @@ def next_line():
         ['assign', ['array', 'mark', ['id', 'i', ['i'], 'i'], ['mark', 'i'], 'mark[i]'], expr, 1]
         '''
         var_info, expr, lineno = stmt[1:]
-        if expr[0] == 'functcall':
-            if len(scope.dest) == 0:
-                next_expr(func, expr, lineno)
-                return
 
         if var_info[0] is 'id':
             lhs = var_info[1]
