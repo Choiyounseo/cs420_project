@@ -130,17 +130,15 @@ class SubScope(Scope):
         return not self.is_condition_true
 
 
-class Function:
+class Function(Optimization):
     def __init__(self):
+        super(Function, self).__init__()
         self.vars = {}
-        self.cpis = {}
-        self.csis = {}
         self.stack = Stack()
 
     def __init__(self, func, args=[]):
+        super(Function, self).__init__()
         self.vars = {}
-        self.cpis = {}
-        self.csis = {}
         self.stack = Stack()
 
         name = func[2]
@@ -190,62 +188,6 @@ class Function:
         self.release_cpi(var_name)
         self.del_csi(var_name)
 
-    def declare_cpi(self, var_name, lineno):
-        cpi = CPI(lineno)
-        if var_name not in self.cpis:
-            self.cpis[var_name] = []
-        self.cpis[var_name].append(cpi)
-
-    def get_cpi(self, var_name):
-        if var_name not in self.cpis:
-            return None
-        return self.cpis[var_name][-1]
-
-    def release_cpi(self, var_name):
-        self.cpis[var_name].pop()
-        if len(self.cpis[var_name]) == 0:
-            self.cpis.pop(var_name, None)
-
-    def access_csi(self, expr_str, used_var, lineno):
-        if expr_str not in self.csis:
-            self.csis[expr_str] = [CSI(used_var, lineno)]
-        elif self.csis[expr_str][-1].lines[-1] is -1:
-            self.csis[expr_str][-1].assign(lineno)
-        else:
-            self.csis[expr_str][-1].add_line(lineno)
-            if len(used_var) > 0:
-                var = self.get_var(used_var[0])
-                if var is not None:
-                    add_cs(var.type, expr_str, self.csis[expr_str][-1].lines)
-
-    def add_csi(self, var):
-        for expr_str in self.csis:
-            for arg in self.csis[expr_str][-1].used_vars:
-                if arg is var:
-                    csi = CSI(self.csis[expr_str][-1].used_vars, -1)
-                    self.csis[expr_str].append(csi)
-
-    def del_csi(self, var):
-        remove_list = []
-        for expr_str in self.csis:
-            for arg in self.csis[expr_str][-1].used_vars:
-                if arg == var:
-                    if expr_str not in remove_list:
-                        remove_list.append(expr_str)
-                    break
-        for expr_str in remove_list:
-            self.release_csi(expr_str)
-
-    def get_csi(self, expr_str):
-        if expr_str not in self.csis:
-            return None
-        return self.csis[expr_str][-1]
-
-    def release_csi(self, expr_str):
-        self.csis[expr_str].pop()
-        if len(self.csis[expr_str]) == 0:
-            self.csis.pop(expr_str, None)
-
 
 # return finished, value.
 # If there's another functcall in expr, it return False, None
@@ -290,7 +232,7 @@ def next_expr(func, expr, lineno):
         return False, None
     elif behavior == 'casting':
         used_vars, expr_str = expr[3:]
-        func.access_csi(expr_str, used_vars, lineno)
+        func.access_csi(expr_str, used_vars, lineno, func.get_var)
 
         finished, value = next_expr(func, expr[2], lineno)
         if not finished:
@@ -302,7 +244,7 @@ def next_expr(func, expr, lineno):
         raise PException(f"Invalid casting {expr[1]}")
     elif behavior == 'array':
         used_vars, expr_str = expr[3:5]
-        func.access_csi(expr_str, used_vars, lineno)
+        func.access_csi(expr_str, used_vars, lineno, func.get_var)
 
         finished, value = next_expr(func, expr[2], lineno)
         if not finished:
@@ -318,7 +260,7 @@ def next_expr(func, expr, lineno):
         return True, var.value
     else:
         used_vars, expr_str = expr[3:5]
-        func.access_csi(expr_str, used_vars, lineno)
+        func.access_csi(expr_str, used_vars, lineno, func.get_var)
 
         finished, value1 = next_expr(func, expr[1], lineno)
         if not finished:
