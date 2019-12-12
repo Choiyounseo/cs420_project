@@ -1,3 +1,10 @@
+void func(int x, int y) {
+    int z;
+    z = 1;
+    x = x + y;
+    y = 1 + x;
+}
+
 int main(void) {
     int a;
     int b;
@@ -13,10 +20,10 @@ int main(void) {
         int a;
         d[2] = 5;
     }
-    c = a;
-    b = a;
-    e = d[0];
-    g = d[0];
-    f = d[1];
+    c = 1;
+    b = 1;
+    e = 1;
+    g = 1;
+    f = 2;
     h = d[2];
 }
