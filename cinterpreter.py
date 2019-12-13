@@ -5,7 +5,7 @@ import copy
 import enum
 import sys
 
-DEBUG = True
+DEBUG = False
 
 class Stack:
     def __init__(self):
@@ -81,6 +81,8 @@ class Scope:
         self.idx = 0
         self.dest = [] # Where the return value had to be located
         self.declared_vars = []
+
+        self.lineno = [self.stmts[0][1]["lineno"], self.stmts[-1][1]["lineno"]]
     
     def update_idx(self):
         self.idx += 1
@@ -90,19 +92,34 @@ class Scope:
 
 class ForScope(Scope):
     def __init__(self, for_info):
-        super(ForScope, self).__init__(for_info["stmts"], ScopeType.FOR)
-        # stmts: [assign, condition, ..stmts.., increment]
-        self.stmts = [for_info["assign"], for_info["condition"]] + self.stmts + [for_info["increment"]]
-        self.running = True
+        # stmts: [assign, increment, condition, ..stmts..]
+        super(ForScope, self).__init__([for_info["assign"], for_info["increment"], for_info["condition"]] + for_info["stmts"], ScopeType.FOR)
+        self.done = False
 
     def update_idx(self):
-        if self.idx == len(self.stmts) - 1:
+        if self.idx == 0:
+            self.idx = 2
+        elif self.idx == len(self.stmts) - 1:
             self.idx = 1
         else:
             self.idx += 1
 
+    def set_done(self):
+        self.done = True
+
     def is_done(self):
-        return not self.running
+        return self.done
+
+class IfScope(Scope):
+    def __init__(self, if_info):
+        super(IfScope, self).__init__([if_info["condition"]] + if_info["stmts"], ScopeType.IF)
+        self.done = False
+    
+    def set_done(self):
+        self.done = True
+    
+    def is_done(self):
+        return self.done or self.idx == len(self.stmts)
 
 class Function(Optimization):
     def __init__(self):
@@ -225,15 +242,15 @@ def next_expr(func, expr, lineno):
 def execute_line():
     global CURRENT_LINE
     # Execute CURRENT_LINE
-
-    func = MAIN_STACK.top()
-    if func is None:
-        return
     
     if DEBUG:
         print(f"Line {CURRENT_LINE}: {PLAIN_CODE[CURRENT_LINE]}")
 
     while True:
+        func = MAIN_STACK.top()
+        if func is None:
+            return
+
         scope = func.stack.top()
         stmt = scope.stmts[scope.idx]
 
@@ -418,11 +435,24 @@ def execute_line():
 
         elif behavior == "if":
             '''
-            ['if', ['average', '>', ['number', 40.0, '40.0'], 21],
-                stmts,
-                [21, 23]]
+            ['if', {
+                'condition': ['condition', {
+                'var': 'k',
+                'cmp': '>',
+                'expr': ['number', {
+                    'value': 6,
+                    'arg_list': [],
+                    'str': '6',
+                    'lineno': 27
+                }],
+                'lineno': 27
+                }],
+                'stmts': [...],
+                'lineno': [27, 29]
+            }]
             '''
-            pass
+            func.stack.push(IfScope(content))
+            continue
 
         elif behavior == "functcall":
             '''
@@ -491,9 +521,47 @@ def execute_line():
 
         elif behavior == "condition":
             '''
-            ['condition', 'a', '>', ['number', 0.0, [0.0], '0.0'], 3]
+            ['condition', {
+              'var': 'k',
+              'cmp': '>',
+              'expr': ['number', {
+                'value': 6,
+                'arg_list': [],
+                'str': '6',
+                'lineno': 27
+              }],
+              'lineno': 27
+            }]
             '''
-            pass
+            expr = content["expr"]
+            lineno = content["lineno"]
+            success, right_value = next_expr(func, expr, lineno)
+            if not success:
+                #TODO
+                pass
+
+            var = func.get_var(content["var"])
+            if var is None:
+                raise CException(f"Variable {content['var']} not found")
+            left_value = var.value
+            if left_value is None:
+                raise CException(f"Varaible {content['var']} is not assigned yet")
+            condition = content["cmp"]
+
+            if condition == '>':
+                if left_value > right_value:
+                    # do nothing
+                    pass
+                else:
+                    scope.set_done()
+            elif condition == '<':
+                if left_value < right_value:
+                    # do nothing
+                    pass
+                else:
+                    scope.set_done()
+            else:
+                raise CException(f"condition({condition}) is invalid", stmt[4])
 
         scope.update_idx()
 
@@ -505,11 +573,23 @@ def execute_line():
 
             scope = func.stack.top()
             if scope.is_done():
+                CURRENT_LINE = scope.lineno[1]
                 func.stack.pop()
+                next_scope = func.stack.top()
+                if next_scope is not None:
+                    next_scope.update_idx()
+                #TODO
+                #remove_optimization_information_with_scope(func, scope, CURRENT_LINE)
+                # for var in scope.declared_vars:
+                #     func.release_var(var)
                 continue
             break
 
-        
+    if isinstance(scope, ForScope) and scope.idx == 1:
+        CURRENT_LINE = scope.lineno[0]
+    else:
+        CURRENT_LINE += 1
+
 
 def interpret_initialization(tree):
     global CURRENT_LINE
@@ -546,7 +626,7 @@ def interpret(tree):
 
         if cmd[0] == "next":
             cnt = int(cmd[1])
-            while cnt > 0:
+            while cnt > 0 and not MAIN_STACK.isEmpty():
                 execute_line()
                 cnt -= 1
 
