@@ -5,13 +5,13 @@ This project is to implement basic interpreter of C language.
 
 ## How to execute
 
-To execute, just run `cinterpreter.py`. All you need to change is to use your own test file to interpret. Run in the root of your project:
+To execute, just run `cinterpreter.py`. All you need to do is to locate your own input source file to inputs/ directory. Run in the root of your project:
 
 ```
 >> virtualenv -p python3 venv
 >> source venv/bin/activate
->> (venv)pip install -r requirements.txt
->> (venv)python cinterpreter.py
+>> (venv) pip install -r requirements.txt
+>> (venv) python cinterpreter.py [INPUT_FILE.c]
 ```
 
 ## Data Structure
