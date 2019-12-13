@@ -5,7 +5,7 @@ import copy
 import enum
 import sys
 
-DEBUG = False
+DEBUG = True
 
 class Stack:
     def __init__(self):
@@ -82,8 +82,27 @@ class Scope:
         self.dest = [] # Where the return value had to be located
         self.declared_vars = []
     
+    def update_idx(self):
+        self.idx += 1
+    
     def is_done(self):
         return self.idx == len(self.stmts)
+
+class ForScope(Scope):
+    def __init__(self, for_info):
+        super(ForScope, self).__init__(for_info["stmts"], ScopeType.FOR)
+        # stmts: [assign, condition, ..stmts.., increment]
+        self.stmts = [for_info["assign"], for_info["condition"]] + self.stmts + [for_info["increment"]]
+        self.running = True
+
+    def update_idx(self):
+        if self.idx == len(self.stmts) - 1:
+            self.idx = 1
+        else:
+            self.idx += 1
+
+    def is_done(self):
+        return not self.running
 
 class Function(Optimization):
     def __init__(self):
@@ -214,256 +233,283 @@ def execute_line():
     if DEBUG:
         print(f"Line {CURRENT_LINE}: {PLAIN_CODE[CURRENT_LINE]}")
 
-    scope = func.stack.top()
-    stmt = scope.stmts[scope.idx]
+    while True:
+        scope = func.stack.top()
+        stmt = scope.stmts[scope.idx]
 
-    behavior, content = stmt
+        behavior, content = stmt
 
-    stmt_lineno = content["lineno"]
-    if isinstance(stmt_lineno, list):
-        stmt_lineno = stmt_lineno[0]
+        stmt_lineno = content["lineno"]
+        if isinstance(stmt_lineno, list):
+            stmt_lineno = stmt_lineno[0]
 
-    # For Empty line
-    if CURRENT_LINE < stmt_lineno:
-        CURRENT_LINE += 1
-        return
+        # For Empty line
+        if CURRENT_LINE != stmt_lineno:
+            break
 
-    if behavior in ["{", "}"]:
-        CURRENT_LINE += 1
-        scope.idx += 1
+        if behavior in ["{", "}"]:
+            pass
 
-    elif behavior == "declare":
-        '''
-        ['declare', {
-                'type': 'int',
-                'vars': [
-                ['id', {
-                    'name': 'c',
-                    'arg_list': ['c'],
-                    'str': 'c',
-                    'lineno': 8
-                }],
-                ['array', {
-                    'name': 'c',
-                    'index': ['number', {
-                        'value': 4,
-                        'arg_list': [],
-                        'str': '4',
-                        'lineno': 4
+        elif behavior == "declare":
+            '''
+            ['declare', {
+                    'type': 'int',
+                    'vars': [
+                    ['id', {
+                        'name': 'c',
+                        'arg_list': ['c'],
+                        'str': 'c',
+                        'lineno': 8
                     }],
-                    'arg_list': ['c'],
-                    'str': 'c[4]',
-                    'lineno': 4
-                }]
-                ],
-                'lineno': 8
-        }]
-        '''
-        var_type = content["type"]
-        var_list = content["vars"]
-        lineno = content["lineno"]
-        for var_info in var_list:
-            var_name = var_info[1]["name"]
-            value = None
+                    ['array', {
+                        'name': 'c',
+                        'index': ['number', {
+                            'value': 4,
+                            'arg_list': [],
+                            'str': '4',
+                            'lineno': 4
+                        }],
+                        'arg_list': ['c'],
+                        'str': 'c[4]',
+                        'lineno': 4
+                    }]
+                    ],
+                    'lineno': 8
+            }]
+            '''
+            var_type = content["type"]
+            var_list = content["vars"]
+            lineno = content["lineno"]
+            for var_info in var_list:
+                var_name = var_info[1]["name"]
+                value = None
 
+                if var_info[0] == "array":
+                    finished, size = next_expr(func, var_info[1]["index"], lineno)
+                    if not finished:
+                        raise CException("Array cannot be resolved")
+
+                    value = [None] * size
+
+                if not var_name in scope.declared_vars:
+                    scope.declared_vars.append(var_name)
+                func.declare_var(var_type, var_name, lineno, value)
+
+        elif behavior == "assign":
+            '''
+            ['assign', {
+                    'var': ['array', {
+                        'name': 'c',
+                        'index': ['number', {
+                            'value': 0,
+                            'arg_list': [],
+                            'str': '0',
+                            'lineno': 7
+                        }],
+                        'arg_list': ['c'],
+                        'str': 'c[0]',
+                        'lineno': 7
+                        }],
+                    'expr': ['number', {
+                        'value': 3,
+                        'arg_list': [],
+                        'str': '3',
+                        'lineno': 7
+                        }],
+                    'lineno': 7
+                }]
+            '''
+            var_info = content["var"]
+            expr = content["expr"]
+            lineno = content["lineno"]
+
+            index = None
+            var_name = var_info[1]["name"]
             if var_info[0] == "array":
-                finished, size = next_expr(func, var_info[1]["index"], lineno)
+                finished, index = next_expr(func, var_info[1]["index"], lineno)
+                if not finished:
+                    raise CException("Array cannot be resolved")
+            
+            var = func.get_var(var_name)
+            if var is None:
+                raise CException(f"Variable {var_name} not found")
+
+            finished, value = next_expr(func, expr, lineno)
+            if finished:
+                var.assign(value, lineno, index)
+                #TODO
+                #update_optimization_information_with_assign(func, expr, lineno, lhs)
+
+        elif behavior == "increment":
+            '''
+            ['increment', {
+                    'var': ['id', {
+                        'name': 'b',
+                        'arg_list': ['b'],
+                        'str': 'b',
+                        'lineno': 7
+                        }],
+                    'lineno': 0
+                }]
+            '''
+            var_info = content["var"]
+            lineno = content["lineno"]
+
+            var_name = var_info[1]["name"]
+            index = None
+            if var_info[0] == "array":
+                finished, index = next_expr(func, var_info[1], lineno)
                 if not finished:
                     raise CException("Array cannot be resolved")
 
-                value = [None] * size
+            var = func.get_var(var_name)
+            if var is None:
+                raise CException(f"Variable {var_name} not found")
 
-            if not var_name in scope.declared_vars:
-                scope.declared_vars.append(var_name)
-            func.declare_var(var_type, var_name, lineno, value)
+            var.increment(lineno, index)
 
-        CURRENT_LINE += 1
-        scope.idx += 1
-
-    elif behavior == "assign":
-        '''
-        ['assign', {
-                'var': ['array', {
-                    'name': 'c',
-                    'index': ['number', {
-                        'value': 0,
-                        'arg_list': [],
-                        'str': '0',
-                        'lineno': 7
-                    }],
-                    'arg_list': ['c'],
-                    'str': 'c[0]',
-                    'lineno': 7
-                    }],
-                'expr': ['number', {
-                    'value': 3,
-                    'arg_list': [],
-                    'str': '3',
-                    'lineno': 7
-                    }],
-                'lineno': 7
-            }]
-        '''
-        var_info = content["var"]
-        expr = content["expr"]
-        lineno = content["lineno"]
-
-        index = None
-        var_name = var_info[1]["name"]
-        if var_info[0] == "array":
-            finished, index = next_expr(func, var_info[1]["index"], lineno)
-            if not finished:
-                raise CException("Array cannot be resolved")
-        
-        var = func.get_var(var_name)
-        if var is None:
-            raise CException(f"Variable {var_name} not found")
-
-        finished, value = next_expr(func, expr, lineno)
-        if finished:
-            var.assign(value, lineno, index)
             #TODO
-            #update_optimization_information_with_assign(func, expr, lineno, lhs)
+            #update_optimization_information_with_increment(func, var_info, lineno)
 
-            CURRENT_LINE += 1
-            scope.idx += 1
-
-    elif behavior == "increment":
-        '''
-        ['increment', {
+        elif behavior == "for":
+            '''
+            ['for', {
+                'assign': ['assign', {
                 'var': ['id', {
-                    'name': 'b',
-                    'arg_list': ['b'],
-                    'str': 'b',
-                    'lineno': 7
-                    }],
-                'lineno': 0
-            }]
-        '''
-        var_info = content["var"]
-        lineno = content["lineno"]
-
-        var_name = var_info[1]["name"]
-        index = None
-        if var_info[0] == "array":
-            finished, index = next_expr(func, var_info[1], lineno)
-            if not finished:
-                raise CException("Array cannot be resolved")
-
-        var = func.get_var(var_name)
-        if var is None:
-            raise CException(f"Variable {var_name} not found")
-
-        var.increment(lineno, index)
-
-        #TODO
-        #update_optimization_information_with_increment(func, var_info, lineno)
-
-        CURRENT_LINE += 1
-        scope.idx += 1
-
-    elif behavior == "for":
-        '''
-        ['for', ['assign', ['id', 'i'],['number', 0.0, '0.0'], 3],
-                ['i', '<', ['id', 'count'], 3],
-                ['increment', ['id', 'i'], 3],
-                stmts,
-                [3, 5]]
-        '''
-        pass
-    elif behavior == "if":
-        '''
-        ['if', ['average', '>', ['number', 40.0, '40.0'], 21],
-               stmts,
-               [21, 23]]
-        '''
-        pass
-
-    elif behavior == "functcall":
-        '''
-        ['functcall', {
-                'callee': 'printf',
-                'args': [
-                ['string', {
+                    'name': 'i',
+                    'arg_list': ['i'],
+                    'str': 'i',
+                    'lineno': 21
+                }],
+                'expr': ['number', {
+                    'value': 0,
                     'arg_list': [],
-                    'str': '"%d\\n%d\\n"',
-                    'lineno': 12
+                    'str': '0',
+                    'lineno': 21
                 }],
-                ['id', {
-                    'name': 'a',
-                    'arg_list': ['a'],
-                    'str': 'a',
-                    'lineno': 12
+                'lineno': 21
                 }],
-                ['id', {
-                    'name': 'b',
-                    'arg_list': ['b'],
-                    'str': 'b',
+                'condition': ['condition', {
+                'var': 'i',
+                'cmp': '<',
+                'expr': ['number', {
+                    'value': 5,
+                    'arg_list': [],
+                    'str': '5',
+                    'lineno': 21
+                }],
+                'lineno': 21
+                }],
+                'increment': ['increment', {
+                'var': ['id', {
+                    'name': 'i',
+                    'arg_list': ['i'],
+                    'str': 'i',
+                    'lineno': 21
+                }],
+                'lineno': 21
+                }],
+                'stmts': [...],
+                'lineno': [21, 30]
+            }]
+            '''
+            func.stack.push(ForScope(content))
+            continue
+
+        elif behavior == "if":
+            '''
+            ['if', ['average', '>', ['number', 40.0, '40.0'], 21],
+                stmts,
+                [21, 23]]
+            '''
+            pass
+
+        elif behavior == "functcall":
+            '''
+            ['functcall', {
+                    'callee': 'printf',
+                    'args': [
+                    ['string', {
+                        'arg_list': [],
+                        'str': '"%d\\n%d\\n"',
+                        'lineno': 12
+                    }],
+                    ['id', {
+                        'name': 'a',
+                        'arg_list': ['a'],
+                        'str': 'a',
+                        'lineno': 12
+                    }],
+                    ['id', {
+                        'name': 'b',
+                        'arg_list': ['b'],
+                        'str': 'b',
+                        'lineno': 12
+                    }]
+                    ],
+                    'arg_list': ['a', 'b'],
+                    'str': 'f("%d\\n%d\\n",a,b',
                     'lineno': 12
                 }]
-                ],
-                'arg_list': ['a', 'b'],
-                'str': 'f("%d\\n%d\\n",a,b',
-                'lineno': 12
-            }]
-        '''
-        callee = content["callee"]
-        args_info = content["args"]
-        lineno = content["lineno"]
+            '''
+            callee = content["callee"]
+            args_info = content["args"]
+            lineno = content["lineno"]
 
-        if callee == "printf":
-            printf_format = ast.literal_eval(args_info[0][1]["str"])
-            args = []
-            for arg in args_info[1:]:
-                if arg[0] == "id":
-                    var_name = arg[1]["name"]
-                    var = func.get_var(var_name)
-                    if var is None:
-                        raise CException(f"Varaible {var_name} not found")
-                    args.append(var.value)
-                elif arg[0] == "array":
-                    var_name = arg[1]["name"]
-                    finished, index = next_expr(func, arg[1]["index"], lineno)
-                    if not finished:
-                        raise CException("Array index cannot be resolved")
-                    var = func.get_var(var_name)
-                    if var is None:
-                        raise CException(f"Varaible {var_name} not found")
-                    args.append(var.value[index])
-                elif arg[0] == "number":
-                    args.append(arg[1]["value"])
+            if callee == "printf":
+                printf_format = ast.literal_eval(args_info[0][1]["str"])
+                args = []
+                for arg in args_info[1:]:
+                    if arg[0] == "id":
+                        var_name = arg[1]["name"]
+                        var = func.get_var(var_name)
+                        if var is None:
+                            raise CException(f"Varaible {var_name} not found")
+                        args.append(var.value)
+                    elif arg[0] == "array":
+                        var_name = arg[1]["name"]
+                        finished, index = next_expr(func, arg[1]["index"], lineno)
+                        if not finished:
+                            raise CException("Array index cannot be resolved")
+                        var = func.get_var(var_name)
+                        if var is None:
+                            raise CException(f"Varaible {var_name} not found")
+                        args.append(var.value[index])
+                    elif arg[0] == "number":
+                        args.append(arg[1]["value"])
 
-        if not IS_IN_OPTIMIZATION:
-            print(printf_format % tuple(args))
+            if not IS_IN_OPTIMIZATION:
+                print(printf_format % tuple(args))
+
+        elif behavior == "return":
+            '''
+            ['return', ['/', ['id', ['total'], 'total'], ['id', ['count'], 'count']], 6]
+            '''
+            # use 'Return' class
+            # Remove currently running function stack
+            pass
+
+        elif behavior == "condition":
+            '''
+            ['condition', 'a', '>', ['number', 0.0, [0.0], '0.0'], 3]
+            '''
+            pass
+
+        scope.update_idx()
+
+        while not MAIN_STACK.isEmpty():
+            func = MAIN_STACK.top()
+            if func.stack.isEmpty():
+                MAIN_STACK.pop()
+                continue
+
+            scope = func.stack.top()
+            if scope.is_done():
+                func.stack.pop()
+                continue
+            break
+
         
-        CURRENT_LINE += 1
-        scope.idx += 1
-
-    elif behavior == "return":
-        '''
-        ['return', ['/', ['id', ['total'], 'total'], ['id', ['count'], 'count']], 6]
-        '''
-        # use 'Return' class
-        # Remove currently running function stack
-        pass
-
-    elif behavior == "condition":
-        '''
-        ['condition', 'a', '>', ['number', 0.0, [0.0], '0.0'], 3]
-        '''
-        pass
-
-    while not MAIN_STACK.isEmpty():
-        func = MAIN_STACK.top()
-        if func.stack.isEmpty():
-            MAIN_STACK.pop()
-            continue
-
-        scope = func.stack.top()
-        if scope.is_done():
-            func.stack.pop()
-            continue
-        break
 
 def interpret_initialization(tree):
     global CURRENT_LINE
@@ -473,7 +519,7 @@ def interpret_initialization(tree):
         FUNCTION_DICT[func_info[1]["name"]] = func_info
 
     if "main" not in FUNCTION_DICT:
-        raise PException("Main function doesn't exist")
+        raise CException("Main function doesn't exist")
 
     MAIN_STACK.push(Function(FUNCTION_DICT["main"]))
     CURRENT_LINE = FUNCTION_DICT["main"][1]["lineno"][0]

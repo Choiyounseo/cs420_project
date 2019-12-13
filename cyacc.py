@@ -32,7 +32,7 @@ def p_func(p):
                 "name": p[2],
                 "params": p[4],
                 "stmts": [p[6]] + p[7] + [p[8]],
-                "lineno": [p.lineno(1), p[8][1]["lineno"]]
+                "lineno": [p[6][1]["lineno"], p[8][1]["lineno"]]
                 }]
     print_log("p_func: ", p[0])
 
@@ -137,7 +137,7 @@ def p_increment_id_inc(p):
     '''increment : id INCREMENT'''
     p[0] = ["increment", {
             "var": p[1],
-            "lineno": p.lineno(1)
+            "lineno": p.lineno(2)
         }]
     print_log("p_increment: ", p[0])
 
@@ -352,7 +352,7 @@ def p_forloop(p):
         "condition": p[5],
         "increment": p[7],
         "stmts": [p[9]] + p[10] + [p[11]],
-        "lineno": [p.lineno(1), p[11][1]],
+        "lineno": [p.lineno(1), p[11][1]["lineno"]],
     }]
     print_log("p_forloop: ", p[0])
 
@@ -361,7 +361,7 @@ def p_if(p):
     p[0] = ["if", {
         "condition": p[3],
         "stmts": [p[5]] + p[6] + [p[7]],
-        "lineno": [p.lineno(1), p[7][1]]
+        "lineno": [p.lineno(1), p[7][1]["lineno"]]
     }]
     print_log("p_if: ", p[0])
 
@@ -416,7 +416,7 @@ def get_parser_tree(code):
 parser = None
 
 if __name__ == '__main__':
-    f = open("inputs/easy.c")
+    f = open("inputs/input0.c")
     code = "".join(f.readlines())
     f.close()
 
