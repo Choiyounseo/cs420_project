@@ -5,7 +5,7 @@ import copy
 import enum
 import sys
 
-DEBUG = False
+DEBUG = True
 
 class Stack:
     def __init__(self):
@@ -207,10 +207,34 @@ def next_expr(func, expr, lineno):
     elif behavior == 'functcall':
         pass
     elif behavior == 'casting':
-        pass
+        #TODO
+        # used_vars, expr_str = expr[3:]
+#       func.access_csi(expr_str, used_vars, lineno, func.get_var)
+        finished, value = next_expr(func, content["expr"], lineno)
+        if not finished:
+            return False, None
+        if content["type"] == "int":
+            return True, int(value)
+        elif content["type"] == "float":
+            return True, float(value)
+        raise CException(f"Invalid casting {expr[1]}")
     elif behavior == 'array':
-        pass
+        #TODO
+        # used_vars, expr_str = expr[3:5]
+        # func.access_csi(expr_str, used_vars, lineno, func.get_var)
+        finished, index = next_expr(func, content["index"], lineno)
+        if not finished:
+            return None, False
+        
+        var = func.get_var(content["name"])
+        if var is None:
+            raise CException(f"Variable {content['name']} not found")
+
+        # add_cp_array(func, replaced_str, lineno)
+
+        return True, var.value[index]
     else:
+        #TODO
         # used_vars, expr_str = expr[3:5]
         # func.access_csi(expr_str, used_vars, lineno, func.get_var)
 
