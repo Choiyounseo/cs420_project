@@ -10,7 +10,7 @@ CS_DICT = {}
 IS_IN_OPTIMIZATION = False
 
 
-class PException(Exception):
+class CException(Exception):
     def __init__(self, msg, lineno=None):
         if lineno is None:
             Exception.__init__(self, msg)
