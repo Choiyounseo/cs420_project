@@ -74,6 +74,7 @@ class Scope:
 class SubScope(Scope):
     def __init__(self, stmts, line_no, scope_type):
         # create condition stmt
+        print(stmts)
         new_stmt = copy.deepcopy(stmts)
         if scope_type is ScopeType.IF:
             new_stmt[0].insert(0, 'condition')
@@ -148,10 +149,10 @@ class Function(Optimization):
         if len(params) != 0 and params != ["void"]:
             expected_args_length = len(params)
             if "void" in params:
-                raise PException(f"Function {name}'void' must be the first and only parameter if specified")
+                raise CException(f"Function {name}'void' must be the first and only parameter if specified")
 
         if expected_args_length != len(args):
-            raise PException(f"Function {name}, expected {expected_args_length} arguments, but {len(args)} given")
+            raise CException(f"Function {name}, expected {expected_args_length} arguments, but {len(args)} given")
 
         for param, arg in zip(params, args):
             self.vars[param[2]] = [VAR(param[1], func[-1][0], arg)]
@@ -201,7 +202,7 @@ def next_expr(func, expr, lineno):
     elif behavior == 'id':
         var = func.get_var(expr[1])
         if var is None:
-            raise PException(f"Variable {expr[1]} not found")
+            raise CException(f"Variable {expr[1]} not found")
         # TODO: need to fix error
         add_cp_id(func, expr, lineno)
 
@@ -216,7 +217,7 @@ def next_expr(func, expr, lineno):
         callee, args_info, tmp1, tmp2, lineno = expr[1:]
         # error if functcall function is 'printf' -> this function call value is used for assignment!
         if not callee in FUNCTION_DICT:
-            raise PException(f"{callee} function doesn't exist")
+            raise CException(f"{callee} function doesn't exist")
         else:
             args_info = args_info[1]
             args = []
@@ -241,7 +242,7 @@ def next_expr(func, expr, lineno):
             return True, int(value)
         elif expr[1] == 'float':
             return True, float(value)
-        raise PException(f"Invalid casting {expr[1]}")
+        raise CException(f"Invalid casting {expr[1]}")
     elif behavior == 'array':
         used_vars, expr_str = expr[3:5]
         func.access_csi(expr_str, used_vars, lineno, func.get_var)
@@ -253,7 +254,7 @@ def next_expr(func, expr, lineno):
         replaced_str = expr[1] + '[' + str(value) + ']'
         var = func.get_var(replaced_str)
         if var is None:
-            raise PException(f"Array has {expr[1][2]}th member")
+            raise CException(f"Array has {expr[1][2]}th member")
 
         add_cp_array(func, replaced_str, lineno)
 
@@ -277,12 +278,12 @@ def next_expr(func, expr, lineno):
             value = value1 - value2
         elif expr[0] == '/':
             if value2 == 0:
-                raise PException("Division by zero")
+                raise CException("Division by zero")
             value = value1 / value2
         elif expr[0] == '*':
             value = value1 * value2
         else:
-            raise PException(f"Invalid operator {expr[0]}")
+            raise CException(f"Invalid operator {expr[0]}")
         return True, value
 
 
@@ -347,11 +348,11 @@ def next_line():
             if var[0] is 'array':
                 finished, index_value = next_expr(func, var[2], lineno)
                 if not finished:
-                    raise PException(f"array cannot be resolved")
+                    raise CException(f"array cannot be resolved")
             elif var[0] is 'id':
                 index_value = 1
             else:
-                raise PException(f"wrong declaration")
+                raise CException(f"wrong declaration")
 
             for i in range(0, index_value):
                 if var[0] is 'array':
@@ -368,7 +369,7 @@ def next_line():
                             scope.update_idx()
                             next_line()
                         else:
-                            raise PException(f"Double declaration in if-statement!")
+                            raise CException(f"Double declaration in if-statement!")
                 else:
                     func.declare_var(var_type, var_name, lineno)
         # Declaration in for-statement invoked once at first.
@@ -391,14 +392,14 @@ def next_line():
         elif var_info[0] is 'array':
             finished, index_value = next_expr(func, var_info[2], lineno)
             if not finished:
-                raise PException(f"array cannot be resolved")
+                raise CException(f"array cannot be resolved")
             lhs = var_info[1] + '[' + str(index_value) + ']'
         else:
-            raise PException(f"assign must be for id or array")
+            raise CException(f"assign must be for id or array")
 
         var = func.get_var(lhs)
         if var is None:
-            raise PException(f"Variable {lhs} not found")
+            raise CException(f"Variable {lhs} not found")
 
         finished, value = next_expr(func, expr, lineno)
 
@@ -425,7 +426,7 @@ def next_line():
         var_info, lineno = stmt[1:]
         var = func.get_var(var_info[1])
         if var is None:
-            raise PException(f"Varaible {var_info[1]} not found")
+            raise CException(f"Varaible {var_info[1]} not found")
         value = var.value
         var.assign(value + 1, lineno)
 
@@ -475,15 +476,15 @@ def next_line():
                 if arg[0] == 'id':
                     var = func.get_var(arg[1])
                     if var is None:
-                        raise PException(f"Varaible {args_info[1]} not found")
+                        raise CException(f"Varaible {args_info[1]} not found")
                     args.append(var.value)
                 elif arg[0] == 'array':
                     finished, index_var = next_expr(func, arg[2], lineno)
                     if not finished:
-                        PException(f"array index cannot be resolved")
+                        CException(f"array index cannot be resolved")
                     var = func.get_var(arg[1] + '[' + str(index_var) + ']')
                     if var is None:
-                        raise PException(f"Varaible {args_info[1]} not found")
+                        raise CException(f"Varaible {args_info[1]} not found")
                     args.append(var.value)
                 elif arg[0] == 'number':
                     args.append(arg[1])
@@ -496,7 +497,7 @@ def next_line():
         else:
             # check whether function is defined function or not
             if not callee in FUNCTION_DICT:
-                raise PException(f"{callee} function doesn't exist")
+                raise CException(f"{callee} function doesn't exist")
             else:
                 args_info = args_info[1]
                 args = []
@@ -549,7 +550,7 @@ def next_line():
             else:
                 scope.set_done()
         else:
-            raise PException(f"condition({condition}) is invalid", stmt[4])
+            raise CException(f"condition({condition}) is invalid", stmt[4])
         CURRENT_LINE = stmt[-1]
 
     if isinstance(scope, SubScope):
@@ -593,7 +594,7 @@ def interpret_initialization(tree):
         FUNCTION_DICT[func_info[2]] = func_info
 
     if "main" not in FUNCTION_DICT:
-        raise PException("Main function doesn't exist")
+        raise CException("Main function doesn't exist")
 
     MAIN_STACK.push(Function(FUNCTION_DICT["main"]))
     CURRENT_LINE = FUNCTION_DICT["main"][4][0][1] - 1
@@ -710,12 +711,12 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         input_filename = sys.argv[1]
     else:
-        input_filename = "function_call7.c"
+        input_filename = "input0.c"
 
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
         process()
-    except PException as e:
+    except CException as e:
         print("Compile Error: ", e)
 
     print_optimized_code()

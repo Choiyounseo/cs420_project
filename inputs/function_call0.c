@@ -11,7 +11,8 @@ int main(void) {
     printf ("%d\n", 5);
 
     int i;
-    int count = 5;
+    int count;
+    count = 5;
     int sum, sum2;
     sum = 0;
     sum2 = 0;

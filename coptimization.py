@@ -109,7 +109,7 @@ def add_cp_id(func, expr, lineno):
     global CP_DICT
     cpi = func.get_cpi(expr[1])
     if cpi is None:
-        raise PException(f"Declared variable {expr[1]} doesn't have cpi")
+        raise CException(f"Declared variable {expr[1]} doesn't have cpi")
 
     if cpi.rhs is None:
         if (lineno, expr[1]) in CP_DICT:
@@ -124,7 +124,7 @@ def add_cp_array(func, replaced_str, lineno):
 
     cpi = func.get_cpi(replaced_str)
     if cpi is None:
-        raise PException(f"{replaced_str} doesn't have cpi")
+        raise CException(f"{replaced_str} doesn't have cpi")
 
     if cpi.rhs is None:
         if (lineno, replaced_str) in CP_DICT:
