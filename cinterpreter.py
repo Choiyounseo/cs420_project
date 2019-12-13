@@ -5,7 +5,7 @@ import copy
 import enum
 import sys
 
-DEBUG = True
+DEBUG = False
 
 class Stack:
     def __init__(self):
@@ -94,7 +94,11 @@ class ForScope(Scope):
     def __init__(self, for_info):
         # stmts: [assign, increment, condition, ..stmts..]
         super(ForScope, self).__init__([for_info["assign"], for_info["increment"], for_info["condition"]] + for_info["stmts"], ScopeType.FOR)
+        self.original_stmts = copy.deepcopy(self.stmts)
         self.done = False
+
+    def init(self):
+        self.stmts = copy.deepcopy(self.original_stmts)
 
     def update_idx(self):
         if self.idx == 0:
@@ -140,16 +144,18 @@ class Function(Optimization):
         lineno = content["lineno"]
 
         expected_args_length = 0
-        if len(params) != 0 and params != ["void"]:
+        if len(params) != 0 and params != ["void"] and params != [None]:
             expected_args_length = len(params)
             if "void" in params:
                 raise CException(f"Function {name}'void' must be the first and only parameter if specified")
+        else:
+            params = []
 
         if expected_args_length != len(args):
             raise CException(f"Function {name}, expected {expected_args_length} arguments, but {len(args)} given")
 
         for param, arg in zip(params, args):
-            self.vars[param[1]["name"]] = [VAR(param[1]["type"], lineno, arg)]
+            self.vars[param[1]["name"]] = [VAR(param[1]["type"], isinstance(arg, list), lineno[0], arg)]
 
         if len(params) != 0:
             for param in params:
@@ -193,6 +199,9 @@ class Function(Optimization):
 def next_expr(func, expr, lineno):
     global CURRENT_LINE
 
+    if expr == None:
+        return True, None
+
     behavior, content = expr
     if behavior == 'number':
         return True, content["value"]
@@ -205,7 +214,31 @@ def next_expr(func, expr, lineno):
 
         return True, var.value
     elif behavior == 'functcall':
-        pass
+        callee = content["callee"]
+        args_info = content["args"]
+        lineno = content["lineno"]
+
+        if not callee in FUNCTION_DICT:
+            raise CException(f"{callee} function doesn't exist")
+        success = True
+        args = []
+        for arg in args_info:
+            finished, value = next_expr(func, arg, lineno)
+            if not finished:
+                success = False
+                break
+            args.append(value)
+        if not success:
+            return False, None
+
+        scope = func.stack.top()
+        expr[:] = []
+        scope.dest = expr
+        new_func = Function(FUNCTION_DICT[callee], args)
+        MAIN_STACK.push(new_func)
+
+        CURRENT_LINE = FUNCTION_DICT[callee][1]["lineno"][0]
+        return False, None
     elif behavior == 'casting':
         #TODO
         # used_vars, expr_str = expr[3:]
@@ -267,13 +300,20 @@ def execute_line():
     global CURRENT_LINE
     # Execute CURRENT_LINE
     
-    if DEBUG:
-        print(f"Line {CURRENT_LINE}: {PLAIN_CODE[CURRENT_LINE]}")
+    line_printed = False
 
     while True:
         func = MAIN_STACK.top()
         if func is None:
             return
+
+        has_return_value = False
+        return_value = None
+        if isinstance(func, Return):
+            return_value = func.value
+            MAIN_STACK.pop()
+            func = MAIN_STACK.top()
+            has_return_value = True
 
         scope = func.stack.top()
         stmt = scope.stmts[scope.idx]
@@ -283,6 +323,17 @@ def execute_line():
         stmt_lineno = content["lineno"]
         if isinstance(stmt_lineno, list):
             stmt_lineno = stmt_lineno[0]
+
+        if has_return_value:
+            if return_value is not None:
+                scope.dest.extend(["number", {"value": return_value}])
+            CURRENT_LINE = stmt_lineno
+
+            scope.dest = [] #reset
+
+        if DEBUG and not line_printed:
+            line_printed = True
+            print(f"Line {CURRENT_LINE}: {PLAIN_CODE[CURRENT_LINE]}")
 
         # For Empty line
         if CURRENT_LINE != stmt_lineno:
@@ -380,6 +431,8 @@ def execute_line():
                 var.assign(value, lineno, index)
                 #TODO
                 #update_optimization_information_with_assign(func, expr, lineno, lhs)
+            else:
+                return
 
         elif behavior == "increment":
             '''
@@ -512,36 +565,65 @@ def execute_line():
 
             if callee == "printf":
                 printf_format = ast.literal_eval(args_info[0][1]["str"])
+                success = True
                 args = []
                 for arg in args_info[1:]:
-                    if arg[0] == "id":
-                        var_name = arg[1]["name"]
-                        var = func.get_var(var_name)
-                        if var is None:
-                            raise CException(f"Varaible {var_name} not found")
-                        args.append(var.value)
-                    elif arg[0] == "array":
-                        var_name = arg[1]["name"]
-                        finished, index = next_expr(func, arg[1]["index"], lineno)
-                        if not finished:
-                            raise CException("Array index cannot be resolved")
-                        var = func.get_var(var_name)
-                        if var is None:
-                            raise CException(f"Varaible {var_name} not found")
-                        args.append(var.value[index])
-                    elif arg[0] == "number":
-                        args.append(arg[1]["value"])
+                    finished, value = next_expr(func, arg, lineno)
+                    if not finished:
+                        success = False
+                        break
+                    args.append(value)
 
-            if not IS_IN_OPTIMIZATION:
-                print(printf_format % tuple(args))
+                if not success:
+                    return
+
+                if not IS_IN_OPTIMIZATION:
+                    print(printf_format % tuple(args))
+            else:
+                if not callee in FUNCTION_DICT:
+                    raise CException(f"{callee} function doesn't exist")
+
+                success = True
+                args = []
+                for arg in args_info:
+                    finished, value = next_expr(func, arg, lineno)
+                    if not finished:
+                        success = False
+                        break
+                    args.append(value)
+                if not success:
+                    return
+                stmt[:] = ["called", {"lineno": lineno}]
+                new_func = Function(FUNCTION_DICT[callee], args)
+                MAIN_STACK.push(new_func)
+
+                CURRENT_LINE = FUNCTION_DICT[callee][1]["lineno"][0]
+                return
 
         elif behavior == "return":
             '''
-            ['return', ['/', ['id', ['total'], 'total'], ['id', ['count'], 'count']], 6]
+            ['return', {
+                    'value': ['id', {
+                        'name': 'a',
+                        'arg_list': ['a'],
+                        'str': 'a',
+                        'lineno': 2
+                    }],
+                    'lineno': 2
+                }]
             '''
             # use 'Return' class
             # Remove currently running function stack
-            pass
+            expr = content["value"]
+            lineno = content["lineno"]
+
+            finished, value = next_expr(func, expr, lineno)
+            if not finished:
+                return
+
+            MAIN_STACK.pop()
+            MAIN_STACK.push(Return(value))
+            return
 
         elif behavior == "condition":
             '''
@@ -561,8 +643,7 @@ def execute_line():
             lineno = content["lineno"]
             success, right_value = next_expr(func, expr, lineno)
             if not success:
-                #TODO
-                pass
+                return
 
             var = func.get_var(content["var"])
             if var is None:
@@ -611,6 +692,7 @@ def execute_line():
 
     if isinstance(scope, ForScope) and scope.idx == 1:
         CURRENT_LINE = scope.lineno[0]
+        scope.init()
     else:
         CURRENT_LINE += 1
 
@@ -739,7 +821,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         input_filename = sys.argv[1]
     else:
-        input_filename = "easy.c"
+        input_filename = "input0.c"
 
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
