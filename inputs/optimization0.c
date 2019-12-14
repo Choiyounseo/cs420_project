@@ -18,6 +18,7 @@ int main(void) {
     d[2] = 3;
     for(b = 0; b < 10; b ++) {
         int a;
+        a = 2;
         d[2] = 5;
     }
     c = a;

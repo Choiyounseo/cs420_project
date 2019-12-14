@@ -115,6 +115,10 @@ def initialize_optimization():
     IS_IN_OPTIMIZATION = True
 
 
+def get_is_in_optimization():
+    return IS_IN_OPTIMIZATION
+
+
 def add_cp_id(func, var_name, lineno):
     global CP_DICT
 
@@ -183,11 +187,6 @@ def update_optimization_information_with_assign(func, stmt, rhs, lineno, lhs):
 def update_optimization_information_with_increment(func, var_name, lineno):
     cpi = func.get_cpi(var_name)
     cpi.assign(None, lineno)
-
-
-def remove_optimization_information_with_scope(func, var_list, current_line):
-    for var in var_list:
-        func.cpis[var][-1].assign(None, current_line)
 
 
 def get_optimized_cp_string(target_line, target_variables):

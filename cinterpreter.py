@@ -7,6 +7,7 @@ import sys
 
 DEBUG = False
 
+
 class Stack:
     def __init__(self):
         self.stack = []
@@ -34,9 +35,11 @@ PLAIN_CODE_ONE_LINE = ""
 CURRENT_LINE = 0
 FUNCTION_DICT = {}
 
+
 class Return:
     def __init__(self, value):
         self.value = value
+
 
 class VAR:
     def __init__(self, var_type, is_array, lineno, value=None):
@@ -69,10 +72,13 @@ class VAR:
         
         self.history.append([lineno, new_value])
         self.value = new_value
+
+
 class ScopeType(enum.Enum):
     FUNC = 0
     IF = 1
     FOR = 2
+
 
 class Scope:
     def __init__(self, stmts, type):
@@ -90,12 +96,14 @@ class Scope:
     def is_done(self):
         return self.idx == len(self.stmts)
 
+
 class ForScope(Scope):
-    def __init__(self, for_info):
+    def __init__(self, for_info, func):
         # stmts: [assign, increment, condition, ..stmts..]
         super(ForScope, self).__init__([for_info["assign"], for_info["increment"], for_info["condition"]] + for_info["stmts"], ScopeType.FOR)
         self.original_stmts = copy.deepcopy(self.stmts)
         self.done = False
+        self.func = func
 
     def init(self):
         self.stmts = copy.deepcopy(self.original_stmts)
@@ -105,6 +113,7 @@ class ForScope(Scope):
             self.idx = 2
         elif self.idx == len(self.stmts) - 1:
             self.idx = 1
+            self.release_vars()
         else:
             self.idx += 1
 
@@ -114,16 +123,27 @@ class ForScope(Scope):
     def is_done(self):
         return self.done
 
+    def release_vars(self):
+        for var in self.declared_vars:
+            self.func.release_var(var)
+
+
 class IfScope(Scope):
-    def __init__(self, if_info):
+    def __init__(self, if_info, func):
         super(IfScope, self).__init__([if_info["condition"]] + if_info["stmts"], ScopeType.IF)
         self.done = False
+        self.func = func
     
     def set_done(self):
         self.done = True
     
     def is_done(self):
         return self.done or self.idx == len(self.stmts)
+
+    def release_vars(self):
+        for var in self.declared_vars:
+            self.func.release_var(var)
+
 
 class Function(Optimization):
     def __init__(self):
@@ -500,7 +520,7 @@ def execute_line():
                 'lineno': [21, 30]
             }]
             '''
-            func.stack.push(ForScope(content))
+            func.stack.push(ForScope(content, func))
             continue
 
         elif behavior == "if":
@@ -521,7 +541,7 @@ def execute_line():
                 'lineno': [27, 29]
             }]
             '''
-            func.stack.push(IfScope(content))
+            func.stack.push(IfScope(content, func))
             continue
 
         elif behavior == "functcall":
@@ -570,7 +590,7 @@ def execute_line():
                 if not success:
                     return
 
-                if not IS_IN_OPTIMIZATION:
+                if not get_is_in_optimization():
                     print(printf_format % tuple(args))
             else:
                 if not callee in FUNCTION_DICT:
@@ -676,9 +696,8 @@ def execute_line():
                 next_scope = func.stack.top()
                 if next_scope is not None:
                     next_scope.update_idx()
-                remove_optimization_information_with_scope(func, scope.declared_vars, CURRENT_LINE)
-                for var in scope.declared_vars:
-                    func.release_var(var)
+                if isinstance(scope, IfScope):
+                    scope.release_vars()
                 continue
             break
 
