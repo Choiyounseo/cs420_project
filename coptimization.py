@@ -169,12 +169,14 @@ def add_cs(expr_type, expr_str, target_lines):
         CS_DICT[expr_str].append((expr_type, set(target_lines)))
 
 
-def update_optimization_information_with_assign(func, stmt, rhs, lineno, lhs):
+def update_optimization_information_with_assign(func, expr, lineno, lhs):
     cpi = func.get_cpi(lhs)
 
     # direct assignment
-    if stmt is 'id' or stmt is 'number':
-        cpi.assign(rhs, lineno)
+    if expr[0] is 'id':
+        cpi.assign(expr[1]["str"], lineno)
+    elif expr[0] is 'number':
+        cpi.assign(expr[1]["value"], lineno)
     # cpi should be erased if not direct assignment
     else:
         cpi.assign(None, lineno)

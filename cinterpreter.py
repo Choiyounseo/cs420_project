@@ -180,7 +180,7 @@ class Function(Optimization):
         if len(params) != 0:
             for param in params:
                 if param[0] is 'id':
-                    self.declare_cpi(param[2], -1)
+                    self.declare_cpi(param[1]["name"], -1)
 
         # Func Scope
         self.stack.push(Scope(content["stmts"], ScopeType.FUNC))
@@ -444,7 +444,7 @@ def execute_line():
             finished, value = next_expr(func, expr, lineno)
             if finished:
                 var.assign(value, lineno, index)
-                update_optimization_information_with_assign(func, expr[0], expr[1]["str"], lineno, var_name)
+                update_optimization_information_with_assign(func, expr, lineno, var_name)
             else:
                 return
 
