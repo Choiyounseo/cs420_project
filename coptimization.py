@@ -105,33 +105,44 @@ class Optimization:
             self.csis.pop(expr_str, None)
 
 
-def add_cp_id(func, expr, lineno):
+def initialize_optimization():
     global CP_DICT
-    cpi = func.get_cpi(expr[1])
-    if cpi is None:
-        raise CException(f"Declared variable {expr[1]} doesn't have cpi")
+    global CS_DICT
+    global IS_IN_OPTIMIZATION
 
-    if cpi.rhs is None:
-        if (lineno, expr[1]) in CP_DICT:
-            del CP_DICT[(lineno, expr[1])]
-        return
-
-    CP_DICT[(lineno, expr[1])] = cpi.rhs
+    CP_DICT = {}
+    CS_DICT = {}
+    IS_IN_OPTIMIZATION = True
 
 
-def add_cp_array(func, replaced_str, lineno):
+def add_cp_id(func, var_name, lineno):
     global CP_DICT
 
-    cpi = func.get_cpi(replaced_str)
+    cpi = func.get_cpi(var_name)
     if cpi is None:
-        raise CException(f"{replaced_str} doesn't have cpi")
+        raise CException(f"Declared variable {var_name} doesn't have cpi")
 
     if cpi.rhs is None:
-        if (lineno, replaced_str) in CP_DICT:
-            del CP_DICT[(lineno, replaced_str)]
+        if (lineno, var_name) in CP_DICT:
+            del CP_DICT[(lineno, var_name)]
         return
 
-    CP_DICT[(lineno, replaced_str)] = cpi.rhs
+    CP_DICT[(lineno, var_name)] = cpi.rhs
+
+
+def add_cp_array(func, var_name, lineno):
+    global CP_DICT
+
+    cpi = func.get_cpi(var_name)
+    if cpi is None:
+        raise CException(f"{var_name} doesn't have cpi")
+
+    if cpi.rhs is None:
+        if (lineno, var_name) in CP_DICT:
+            del CP_DICT[(lineno, var_name)]
+        return
+
+    CP_DICT[(lineno, var_name)] = cpi.rhs
 
 
 def add_cs(expr_type, expr_str, target_lines):
@@ -154,14 +165,12 @@ def add_cs(expr_type, expr_str, target_lines):
         CS_DICT[expr_str].append((expr_type, set(target_lines)))
 
 
-def update_optimization_information_with_assign(func, expr, lineno, lhs):
+def update_optimization_information_with_assign(func, stmt, rhs, lineno, lhs):
     cpi = func.get_cpi(lhs)
 
     # direct assignment
-    if expr[0] is 'number':
-        cpi.assign(expr[1], lineno)
-    elif expr[0] is 'id':
-        cpi.assign(expr[1], lineno)
+    if stmt is 'id' or stmt is 'number':
+        cpi.assign(rhs, lineno)
     # cpi should be erased if not direct assignment
     else:
         cpi.assign(None, lineno)
@@ -171,13 +180,13 @@ def update_optimization_information_with_assign(func, expr, lineno, lhs):
             func.csis[expr_str][-1].lines = [-1]
 
 
-def update_optimization_information_with_increment(func, var_info, lineno):
-    cpi = func.get_cpi(var_info[1])
+def update_optimization_information_with_increment(func, var_name, lineno):
+    cpi = func.get_cpi(var_name)
     cpi.assign(None, lineno)
 
 
-def remove_optimization_information_with_scope(func, scope, current_line):
-    for var in scope.assigned_vars:
+def remove_optimization_information_with_scope(func, var_list, current_line):
+    for var in var_list:
         func.cpis[var][-1].assign(None, current_line)
 
 

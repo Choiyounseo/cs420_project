@@ -160,9 +160,7 @@ class Function(Optimization):
         if len(params) != 0:
             for param in params:
                 if param[0] is 'id':
-                    #TODO
-                    pass
-#                    self.declare_cpi(param[2], -1)
+                    self.declare_cpi(param[2], -1)
 
         # Func Scope
         self.stack.push(Scope(content["stmts"], ScopeType.FUNC))
@@ -199,7 +197,7 @@ class Function(Optimization):
 def next_expr(func, expr, lineno):
     global CURRENT_LINE
 
-    if expr == None:
+    if expr is None:
         return True, None
 
     behavior, content = expr
@@ -209,8 +207,7 @@ def next_expr(func, expr, lineno):
         var = func.get_var(content["name"])
         if var is None:
             raise CException(f"Variable {content['name']} not found")
-        # TODO
-        #add_cp_id(func, expr, lineno)
+        add_cp_id(func, content["name"], lineno)
 
         return True, var.value
     elif behavior == 'functcall':
@@ -218,7 +215,7 @@ def next_expr(func, expr, lineno):
         args_info = content["args"]
         lineno = content["lineno"]
 
-        if not callee in FUNCTION_DICT:
+        if callee not in FUNCTION_DICT:
             raise CException(f"{callee} function doesn't exist")
         success = True
         args = []
@@ -240,9 +237,7 @@ def next_expr(func, expr, lineno):
         CURRENT_LINE = FUNCTION_DICT[callee][1]["lineno"][0]
         return False, None
     elif behavior == 'casting':
-        #TODO
-        # used_vars, expr_str = expr[3:]
-#       func.access_csi(expr_str, used_vars, lineno, func.get_var)
+        func.access_csi(content["str"], content["arg_list"], lineno, func.get_var)
         finished, value = next_expr(func, content["expr"], lineno)
         if not finished:
             return False, None
@@ -252,9 +247,9 @@ def next_expr(func, expr, lineno):
             return True, float(value)
         raise CException(f"Invalid casting {expr[1]}")
     elif behavior == 'array':
-        #TODO
-        # used_vars, expr_str = expr[3:5]
-        # func.access_csi(expr_str, used_vars, lineno, func.get_var)
+        # TODO : optimization with array
+        #var_info = content["index"][1]
+        #func.access_csi(var_info["str"], var_info["arg_list"], lineno, func.get_var)
         finished, index = next_expr(func, content["index"], lineno)
         if not finished:
             return None, False
@@ -263,13 +258,13 @@ def next_expr(func, expr, lineno):
         if var is None:
             raise CException(f"Variable {content['name']} not found")
 
-        # add_cp_array(func, replaced_str, lineno)
+        # TODO : optimization with array
+        #replaced_str = f"{content['name']}[{var_info['str']}]"
+        #add_cp_array(func, replaced_str, lineno)
 
         return True, var.value[index]
     else:
-        #TODO
-        # used_vars, expr_str = expr[3:5]
-        # func.access_csi(expr_str, used_vars, lineno, func.get_var)
+        func.access_csi(content["str"], content["arg_list"], lineno, func.get_var)
 
         finished, value1 = next_expr(func, content["lhs"], lineno)
         if not finished:
@@ -429,8 +424,7 @@ def execute_line():
             finished, value = next_expr(func, expr, lineno)
             if finished:
                 var.assign(value, lineno, index)
-                #TODO
-                #update_optimization_information_with_assign(func, expr, lineno, lhs)
+                update_optimization_information_with_assign(func, expr[0], expr[1]["str"], lineno, var_name)
             else:
                 return
 
@@ -462,8 +456,7 @@ def execute_line():
 
             var.increment(lineno, index)
 
-            #TODO
-            #update_optimization_information_with_increment(func, var_info, lineno)
+            update_optimization_information_with_increment(func, var_name, lineno)
 
         elif behavior == "for":
             '''
@@ -683,10 +676,9 @@ def execute_line():
                 next_scope = func.stack.top()
                 if next_scope is not None:
                     next_scope.update_idx()
-                #TODO
-                #remove_optimization_information_with_scope(func, scope, CURRENT_LINE)
-                # for var in scope.declared_vars:
-                #     func.release_var(var)
+                remove_optimization_information_with_scope(func, scope.declared_vars, CURRENT_LINE)
+                for var in scope.declared_vars:
+                    func.release_var(var)
                 continue
             break
 
@@ -709,6 +701,7 @@ def interpret_initialization(tree):
 
     MAIN_STACK.push(Function(FUNCTION_DICT["main"]))
     CURRENT_LINE = FUNCTION_DICT["main"][1]["lineno"][0]
+
 
 def interpret(tree):
     global CURRENT_LINE
@@ -782,16 +775,13 @@ def load_input_file(filename):
 def process_without_input():
     global MAIN_STACK
     global CURRENT_LINE
-    global CP_DICT
-    global CS_DICT
     global FUNCTION_DICT
 
     # initialize
     MAIN_STACK = Stack()
     CURRENT_LINE = 0
-    CP_DICT = {}
-    CS_DICT = {}
     FUNCTION_DICT = {}
+    initialize_optimization()
 
     # process whole lines
     tree = get_parser_tree(PLAIN_CODE_ONE_LINE)
@@ -804,12 +794,13 @@ def process_without_input():
 def print_optimized_code():
     global PLAIN_CODE
     global PLAIN_CODE_ONE_LINE
-    global IS_IN_OPTIMIZATION
 
-    IS_IN_OPTIMIZATION = True
     PLAIN_CODE, PLAIN_CODE_ONE_LINE = get_cp_optimized_code(PLAIN_CODE)
+    if DEBUG:
+        for line in PLAIN_CODE:
+            print(line)
     process_without_input()
-    PLAIN_CODE,PLAIN_CODE_ONE_LINE = get_cs_optimized_code(PLAIN_CODE)
+    PLAIN_CODE, PLAIN_CODE_ONE_LINE = get_cs_optimized_code(PLAIN_CODE)
 
     # write optimized code
     f = open("output.c", "w")
@@ -829,5 +820,4 @@ if __name__ == "__main__":
     except CException as e:
         print("Compile Error: ", e)
 
-    #TODO
-    #print_optimized_code()
+    print_optimized_code()
