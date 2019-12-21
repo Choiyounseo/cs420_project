@@ -7,10 +7,12 @@ int main(void) {
 	int a[1];
 
 	a[0] = 0;
-	printf("a[0] is %d\n", a[0]);
+	printf("currently, %d\n", a[0]);
+
+	printf("Changes.. \n");
 
 	change(a, 0);
-	printf("now a[0] is %d\n", a[0]);
+	printf("now, %d\n", a[0]);
 
 	printf("Done!\n");
 }

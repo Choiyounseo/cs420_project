@@ -158,6 +158,7 @@ def p_functcall(p):
             func_str += ','
         func_str += arg[1]["str"]
         func_arg_list += arg[1]["arg_list"]
+    func_str += ')'
     p[0] = ["functcall", {
                 "callee": p[1],
                 "args": p[3],

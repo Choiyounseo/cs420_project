@@ -172,7 +172,10 @@ class Function(Optimization):
             raise CException(f"Function {name}, expected {expected_args_length} arguments, but {len(args)} given")
 
         for param, arg in zip(params, args):
-            self.vars[param[1]["name"]] = [VAR(param[1]["type"], isinstance(arg, list), lineno[0], arg)]
+            if isinstance(arg, VAR):
+                self.vars[param[1]["name"]] = [arg]
+            else:
+                self.vars[param[1]["name"]] = [VAR(param[1]["type"], False, lineno[0], arg)]
 
         if len(params) != 0:
             for param in params:
@@ -182,14 +185,15 @@ class Function(Optimization):
         # Func Scope
         self.stack.push(Scope(content["stmts"], ScopeType.FUNC))
 
-    def declare_var(self, var_type, var_name, lineno, value=None):
+    def declare_var(self, var_type, var_name, lineno, value=None, is_array=False):
         var = VAR(var_type, isinstance(value, list), lineno, value)
         if var_name not in self.vars:
             self.vars[var_name] = []
         self.vars[var_name].append(var)
 
         # For optimization
-        self.declare_cpi(var_name, lineno)
+        if not is_array:
+            self.declare_cpi(var_name, lineno)
         self.add_csi(var_name)
 
     def get_var(self, var_name):
@@ -233,16 +237,18 @@ def next_expr(func, expr, lineno):
             value = var
         else:
             value = var.value
-        add_cp_id(func, content["name"], lineno)
+        if not var.is_array:
+            add_cp_id(func, content["name"], lineno)
 
         return True, value
     elif behavior == 'functcall':
         callee = content["callee"]
         args_info = content["args"]
         lineno = content["lineno"]
-
         if callee not in FUNCTION_DICT:
             raise CException(f"{callee} function doesn't exist")
+
+        func.access_csi(content["str"], content["arg_list"], lineno, FUNCTION_DICT[callee][1]["type"])
         success = True
         args = []
         for arg in args_info:
@@ -263,7 +269,7 @@ def next_expr(func, expr, lineno):
         CURRENT_LINE = FUNCTION_DICT[callee][1]["lineno"][0]
         return False, None
     elif behavior == 'casting':
-        func.access_csi(content["str"], content["arg_list"], lineno, func.get_var)
+        func.access_csi(content["str"], content["arg_list"], lineno, content["type"])
         finished, value = next_expr(func, content["expr"], lineno)
         if not finished:
             return False, None
@@ -273,9 +279,6 @@ def next_expr(func, expr, lineno):
             return True, float(value)
         raise CException(f"Invalid casting {expr[1]}")
     elif behavior == 'array':
-        # TODO : optimization with array
-        #var_info = content["index"][1]
-        #func.access_csi(var_info["str"], var_info["arg_list"], lineno, func.get_var)
         finished, index = next_expr(func, content["index"], lineno)
         if not finished:
             return None, False
@@ -284,13 +287,10 @@ def next_expr(func, expr, lineno):
         if var is None:
             raise CException(f"Variable {content['name']} not found")
 
-        # TODO : optimization with array
-        #replaced_str = f"{content['name']}[{var_info['str']}]"
-        #add_cp_array(func, replaced_str, lineno)
+        func.access_csi(content["str"], content["arg_list"], lineno, var.type)
 
-        return True, var.value[index]
+        return True, var.value[int(index)]
     else:
-        func.access_csi(content["str"], content["arg_list"], lineno, func.get_var)
 
         finished, value1 = next_expr(func, content["lhs"], lineno)
         if not finished:
@@ -314,6 +314,7 @@ def next_expr(func, expr, lineno):
             value = value1 * value2
         else:
             raise CException(f"Invalid operator {expr[0]}")
+        func.access_csi(content["str"], content["arg_list"], lineno, type(value).__name__)
         return True, value
 
 
@@ -396,17 +397,17 @@ def execute_line():
             for var_info in var_list:
                 var_name = var_info[1]["name"]
                 value = None
-
+                is_array = False
                 if var_info[0] == "array":
                     finished, size = next_expr(func, var_info[1]["index"], lineno)
                     if not finished:
                         raise CException("Array cannot be resolved")
-
+                    is_array = True
                     value = [None] * size
 
                 if not var_name in scope.declared_vars:
                     scope.declared_vars.append(var_name)
-                func.declare_var(var_type, var_name, lineno, value)
+                func.declare_var(var_type, var_name, lineno, value, is_array)
 
         elif behavior == "assign":
             '''
@@ -438,7 +439,9 @@ def execute_line():
 
             index = None
             var_name = var_info[1]["name"]
+            is_array = False
             if var_info[0] == "array":
+                is_array = True
                 finished, index = next_expr(func, var_info[1]["index"], lineno)
                 if not finished:
                     raise CException("Array cannot be resolved")
@@ -450,7 +453,7 @@ def execute_line():
             finished, value = next_expr(func, expr, lineno)
             if finished:
                 var.assign(value, lineno, index)
-                update_optimization_information_with_assign(func, expr, lineno, var_name)
+                update_optimization_information_with_assign(func, expr, lineno, var_name, is_array)
             else:
                 return
 
@@ -471,7 +474,9 @@ def execute_line():
 
             var_name = var_info[1]["name"]
             index = None
+            is_array = False
             if var_info[0] == "array":
+                is_array = True
                 finished, index = next_expr(func, var_info[1], lineno)
                 if not finished:
                     raise CException("Array cannot be resolved")
@@ -481,8 +486,8 @@ def execute_line():
                 raise CException(f"Variable {var_name} not found")
 
             var.increment(lineno, index)
-
-            update_optimization_information_with_increment(func, var_name, lineno)
+            if not is_array:
+                update_optimization_information_with_increment(func, var_name, lineno)
 
         elif behavior == "for":
             '''

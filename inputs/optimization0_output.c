@@ -2,7 +2,7 @@ void func(int x, int y) {
     int z;
     z = 1;
     x = x + y;
-    y = 1 + x;
+    y = z + x;
 }
 
 int main(void) {
@@ -23,8 +23,10 @@ int main(void) {
     }
     c = 1;
     b = 1;
-    e = 1;
-    g = 1;
-    f = 2;
+    int __optimized_variable0;
+    __optimized_variable0 = d[0];
+    e = __optimized_variable0;
+    g = __optimized_variable0;
+    f = d[1];
     h = d[2];
 }

@@ -1,13 +1,8 @@
-void donothing(int a) {
-	int x, y;
-	x = 0;
-	y = x + 3;
-	y = a + 3;
-	return;
+int f(int a){
+	return 2 * a;
 }
-
-int main(void) {
-	donothing(2);
-
-	printf("Done!\n");
+int main(void){
+	int x, y;
+	x = f(2) + 4;
+	y = f(2) + 3;
 }

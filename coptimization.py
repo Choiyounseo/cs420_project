@@ -64,17 +64,14 @@ class Optimization:
         if len(self.cpis[var_name]) == 0:
             self.cpis.pop(var_name, None)
 
-    def access_csi(self, expr_str, used_var, lineno, get_var):
+    def access_csi(self, expr_str, used_var, lineno, type):
         if expr_str not in self.csis:
             self.csis[expr_str] = [CSI(used_var, lineno)]
         elif self.csis[expr_str][-1].lines[-1] is -1:
             self.csis[expr_str][-1].assign(lineno)
         else:
             self.csis[expr_str][-1].add_line(lineno)
-            if len(used_var) > 0:
-                var = get_var(used_var[0])
-                if var is not None:
-                    add_cs(var.type, expr_str, self.csis[expr_str][-1].lines)
+            add_cs(type, expr_str, self.csis[expr_str][-1].lines)
 
     def add_csi(self, var):
         for expr_str in self.csis:
@@ -169,17 +166,18 @@ def add_cs(expr_type, expr_str, target_lines):
         CS_DICT[expr_str].append((expr_type, set(target_lines)))
 
 
-def update_optimization_information_with_assign(func, expr, lineno, lhs):
-    cpi = func.get_cpi(lhs)
+def update_optimization_information_with_assign(func, expr, lineno, lhs, is_array):
+    if not is_array:
+        cpi = func.get_cpi(lhs)
 
-    # direct assignment
-    if expr[0] is 'id':
-        cpi.assign(expr[1]["str"], lineno)
-    elif expr[0] is 'number':
-        cpi.assign(expr[1]["value"], lineno)
-    # cpi should be erased if not direct assignment
-    else:
-        cpi.assign(None, lineno)
+        # direct assignment
+        if expr[0] is 'id':
+            cpi.assign(expr[1]["str"], lineno)
+        elif expr[0] is 'number':
+            cpi.assign(expr[1]["value"], lineno)
+        # cpi should be erased if not direct assignment
+        else:
+            cpi.assign(None, lineno)
 
     for expr_str in func.csis:
         if lhs in func.csis[expr_str][-1].used_vars:
@@ -233,11 +231,10 @@ def get_optimized_cs_string(target_line, target_expression, cs_variable):
     right_expression = right_expression.replace(" ", "")
     target_expression = target_expression.replace("*", "\*")
     target_expression = target_expression.replace("+", "\+")
-
-    # find target variables
-    if '[' in target_expression:
-        # TODO : array
-        return target_line
+    target_expression = target_expression.replace("[", "\[")
+    target_expression = target_expression.replace("]", "\]")
+    target_expression = target_expression.replace("(", "\(")
+    target_expression = target_expression.replace(")", "\)")
 
     delta_index = 0
     new_expression = str(right_expression)
