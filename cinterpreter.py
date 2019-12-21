@@ -36,9 +36,6 @@ CURRENT_LINE = 0
 FUNCTION_DICT = {}
 
 
-class Return:
-    def __init__(self, value):
-        self.value = value
 
 
 class VAR:
@@ -210,6 +207,11 @@ class Function(Optimization):
         self.release_cpi(var_name)
         self.del_csi(var_name)
 
+class Return(Function):
+    def __init__(self, value):
+        self.vars = {}
+        self.stack = Stack()
+        self.value = value
 
 # return finished, value.
 # If there's another functcall in expr, it return False, None
@@ -831,7 +833,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         input_filename = sys.argv[1]
     else:
-        input_filename = "input0.c"
+        input_filename = "arrayoptimization.c"
 
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
