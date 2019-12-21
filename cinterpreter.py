@@ -229,9 +229,13 @@ def next_expr(func, expr, lineno):
         var = func.get_var(content["name"])
         if var is None:
             raise CException(f"Variable {content['name']} not found")
+        if var.is_array:
+            value = var
+        else:
+            value = var.value
         add_cp_id(func, content["name"], lineno)
 
-        return True, var.value
+        return True, value
     elif behavior == 'functcall':
         callee = content["callee"]
         args_info = content["args"]
@@ -752,12 +756,28 @@ def interpret(tree):
 
         elif cmd[0] == "print":
             func = MAIN_STACK.top()
-            var = func.get_var(cmd[1])
-            if var is None:
-                print(f"Invisible variable")
+            if "[" in cmd[1]:
+                target = cmd[1][:cmd[1].find("[")]
+                index = int(cmd[1][cmd[1].find("[")+1:cmd[1].find("]")])
+                var = func.get_var(target)
+                if var is None:
+                    print(f"Invisible variable")
+                else:
+                    if not var.is_array:
+                        print(f"{target} is not an array.")
+                    else:
+                        if not (0 <= index < len(var.value)):
+                            print(f"{index} is out of range for array {target}")
+                        else:
+                            value = "N/A" if var.value[index] is None else var.value[index]
+                            print(f"Value of {cmd[1]}: {value}")
             else:
-                value = "N/A" if var.value is None else var.value
-                print(f"Value of {cmd[1]}: {var.value}")
+                var = func.get_var(cmd[1])
+                if var is None:
+                    print(f"Invisible variable")
+                else:
+                    value = "N/A" if var.value is None else var.value
+                    print(f"Value of {cmd[1]}: {value}")
 
         elif cmd[0] == "trace":
             func = MAIN_STACK.top()
@@ -833,7 +853,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         input_filename = sys.argv[1]
     else:
-        input_filename = "arrayoptimization.c"
+        input_filename = "array_pointer.c"
 
     try:
         PLAIN_CODE, PLAIN_CODE_ONE_LINE = load_input_file(input_filename)
